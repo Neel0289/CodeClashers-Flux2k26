@@ -14,8 +14,16 @@ class NegotiationMessageSerializer(serializers.ModelSerializer):
 
 class NegotiationSerializer(serializers.ModelSerializer):
     messages = NegotiationMessageSerializer(many=True, read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    buyer_name = serializers.CharField(source='buyer.first_name', read_only=True)
+    farmer_name = serializers.CharField(source='farmer.first_name', read_only=True)
+    latest_offered_price = serializers.SerializerMethodField()
+
+    def get_latest_offered_price(self, obj):
+        last_message = obj.messages.order_by('-timestamp').first()
+        return last_message.offered_price if last_message else None
 
     class Meta:
         model = Negotiation
-        fields = ['id', 'product', 'buyer', 'farmer', 'quantity', 'status', 'final_price', 'created_at', 'updated_at', 'messages']
+        fields = ['id', 'product', 'product_name', 'buyer', 'buyer_name', 'farmer', 'farmer_name', 'quantity', 'status', 'final_price', 'latest_offered_price', 'created_at', 'updated_at', 'messages']
         read_only_fields = ['buyer', 'farmer', 'status', 'final_price', 'created_at', 'updated_at']

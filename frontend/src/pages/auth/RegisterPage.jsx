@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
+import { CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 
 import { register } from '../../api/auth'
@@ -13,6 +14,17 @@ const roleCards = [
   ['logistics', 'Logistics Partner'],
 ]
 
+const INDIA_CENTER = [22.9734, 78.6569]
+
+function LocationPicker({ onPick }) {
+  useMapEvents({
+    click(event) {
+      onPick(event.latlng.lat, event.latlng.lng)
+    },
+  })
+  return null
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate()
   const { setUser } = useAuth()
@@ -20,6 +32,38 @@ export default function RegisterPage() {
   const [role, setRole] = useState('farmer')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [locationLoading, setLocationLoading] = useState(false)
+  const [locationError, setLocationError] = useState('')
+  const [farmCoords, setFarmCoords] = useState({ latitude: '', longitude: '' })
+
+  const requestCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported in this browser.')
+      return
+    }
+
+    setLocationLoading(true)
+    setLocationError('')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFarmCoords({
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+        })
+        setLocationLoading(false)
+      },
+      () => {
+        setLocationError('Could not get current location. Please allow location access and try again.')
+        setLocationLoading(false)
+      },
+      { enableHighAccuracy: true, timeout: 12000 },
+    )
+  }
+
+  const handleMapPick = (lat, lon) => {
+    setFarmCoords({ latitude: String(lat), longitude: String(lon) })
+    setLocationError('')
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -28,6 +72,15 @@ export default function RegisterPage() {
     const formData = new FormData(event.currentTarget)
     const payload = Object.fromEntries(formData.entries())
     payload.role = role
+    if (role === 'farmer') {
+      if (!farmCoords.latitude || !farmCoords.longitude) {
+        setError('Current location is required for farmer registration. Please fetch location and try again.')
+        setSubmitting(false)
+        return
+      }
+      payload.farm_latitude = Number(farmCoords.latitude)
+      payload.farm_longitude = Number(farmCoords.longitude)
+    }
     if (payload.operating_states) {
       payload.operating_states = payload.operating_states.split(',').map((s) => s.trim()).filter(Boolean)
     }
@@ -78,6 +131,35 @@ export default function RegisterPage() {
                 <Input name="farm_name" placeholder="Farm name" required />
                 <Input name="farm_state" placeholder="Farm state" required />
                 <Input name="farm_city" placeholder="Farm city" required />
+                <div className="rounded-[12px] border border-border bg-white p-3">
+                  <p className="text-sm font-medium text-text-primary">Current Location (Required)</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Latitude: {farmCoords.latitude || '--'} | Longitude: {farmCoords.longitude || '--'}
+                  </p>
+                  {locationError && <p className="mt-2 text-xs text-red-600">{locationError}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" onClick={requestCurrentLocation} disabled={locationLoading}>
+                      {locationLoading ? 'Fetching Location...' : 'Use Current Location'}
+                    </Button>
+                    <p className="self-center text-xs text-text-muted">or select by clicking on map below</p>
+                  </div>
+                  <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                    <MapContainer center={INDIA_CENTER} zoom={5} scrollWheelZoom className="h-full w-full">
+                      <TileLayer
+                        attribution='&copy; OpenStreetMap contributors'
+                        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                      />
+                      <LocationPicker onPick={handleMapPick} />
+                      {farmCoords.latitude && farmCoords.longitude && (
+                        <CircleMarker
+                          center={[Number(farmCoords.latitude), Number(farmCoords.longitude)]}
+                          radius={8}
+                          pathOptions={{ color: '#2E7D32', fillColor: '#2E7D32', fillOpacity: 0.85 }}
+                        />
+                      )}
+                    </MapContainer>
+                  </div>
+                </div>
               </>
             )}
             {role === 'buyer' && (

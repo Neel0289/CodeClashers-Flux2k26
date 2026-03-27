@@ -18,6 +18,9 @@ class ProductViewSet(viewsets.ModelViewSet):
 		queryset = Product.objects.select_related('farmer').all().order_by('-created_at')
 
 		if self.action == 'list':
+			if self.request.user.is_authenticated and self.request.user.role == 'farmer':
+				return queryset.filter(farmer=self.request.user)
+
 			queryset = queryset.filter(is_available=True)
 			category = self.request.query_params.get('category')
 			state = self.request.query_params.get('state')
@@ -39,7 +42,23 @@ class ProductViewSet(viewsets.ModelViewSet):
 	def perform_create(self, serializer):
 		if self.request.user.role != 'farmer':
 			raise permissions.PermissionDenied('Only farmers can create listings.')
-		serializer.save(farmer=self.request.user)
+		profile = getattr(self.request.user, 'farmer_profile', None)
+		state = serializer.validated_data.get('state')
+		city = serializer.validated_data.get('city')
+		serializer.save(
+			farmer=self.request.user,
+			state=state or (profile.state if profile else ''),
+			city=city or (profile.city if profile else ''),
+		)
+
+	def perform_update(self, serializer):
+		profile = getattr(self.request.user, 'farmer_profile', None)
+		state = serializer.validated_data.get('state')
+		city = serializer.validated_data.get('city')
+		serializer.save(
+			state=state or (profile.state if profile else ''),
+			city=city or (profile.city if profile else ''),
+		)
 
 	def update(self, request, *args, **kwargs):
 		instance = self.get_object()

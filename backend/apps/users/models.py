@@ -20,6 +20,8 @@ class FarmerProfile(models.Model):
 	farm_name = models.CharField(max_length=200)
 	state = models.CharField(max_length=100)
 	city = models.CharField(max_length=100)
+	latitude = models.FloatField(null=True, blank=True)
+	longitude = models.FloatField(null=True, blank=True)
 
 
 class BuyerProfile(models.Model):

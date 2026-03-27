@@ -66,6 +66,10 @@ class NegotiationRespondAPIView(APIView):
 		if action not in ['counter', 'accept', 'reject']:
 			return Response({'detail': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
 
+		if action == 'accept' and not offered_price:
+			last_msg = negotiation.messages.order_by('-timestamp').first()
+			offered_price = last_msg.offered_price if last_msg else None
+
 		if action in ['counter', 'accept'] and not offered_price:
 			return Response({'detail': 'offered_price is required.'}, status=status.HTTP_400_BAD_REQUEST)
 

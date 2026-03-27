@@ -5,6 +5,8 @@ from apps.orders.models import Order
 
 class OrderSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
+    buyer_name = serializers.CharField(source='buyer.first_name', read_only=True)
+    farmer_name = serializers.CharField(source='farmer.first_name', read_only=True)
 
     class Meta:
         model = Order

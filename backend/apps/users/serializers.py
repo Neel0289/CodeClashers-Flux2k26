@@ -16,6 +16,8 @@ class RegisterSerializer(serializers.Serializer):
     farm_name = serializers.CharField(required=False)
     farm_state = serializers.CharField(required=False)
     farm_city = serializers.CharField(required=False)
+    farm_latitude = serializers.FloatField(required=False)
+    farm_longitude = serializers.FloatField(required=False)
 
     business_name = serializers.CharField(required=False)
     business_type = serializers.ChoiceField(choices=[('restaurant', 'Restaurant'), ('store', 'Store')], required=False)
@@ -33,7 +35,7 @@ class RegisterSerializer(serializers.Serializer):
 
         role = attrs['role']
         required_map = {
-            'farmer': ['farm_name', 'farm_state', 'farm_city'],
+            'farmer': ['farm_name', 'farm_state', 'farm_city', 'farm_latitude', 'farm_longitude'],
             'buyer': ['business_name', 'business_type', 'state', 'city'],
             'logistics': ['vehicle_type', 'max_weight_capacity', 'operating_states'],
         }
@@ -67,6 +69,8 @@ class RegisterSerializer(serializers.Serializer):
                 farm_name=validated_data['farm_name'],
                 state=validated_data['farm_state'],
                 city=validated_data['farm_city'],
+                latitude=validated_data['farm_latitude'],
+                longitude=validated_data['farm_longitude'],
             )
         elif user.role == 'buyer':
             BuyerProfile.objects.create(
@@ -114,7 +118,7 @@ class LoginSerializer(serializers.Serializer):
 class FarmerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = FarmerProfile
-        fields = ['farm_name', 'state', 'city']
+        fields = ['farm_name', 'state', 'city', 'latitude', 'longitude']
 
 
 class BuyerProfileSerializer(serializers.ModelSerializer):
