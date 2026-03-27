@@ -4,17 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#F5F7F6',
+        bg: '#FDFBF7',
         surface: '#FFFFFF',
         'surface-2': '#FFFFFF',
         border: '#DFE7E3',
-        'text-primary': '#263238',
+        'text-primary': '#2E7D32',
         'text-muted': '#60727A',
         accent: '#2E7D32',
         'accent-bright': '#2E7D32',
         'accent-dark': '#1B5E20',
-        brown: '#2E7D32',
-        'brown-light': '#2E7D32',
+        brown: '#6D544C',
+        'brown-light': '#8D736A',
         'brown-surface': '#FFFFFF',
       },
       fontFamily: {

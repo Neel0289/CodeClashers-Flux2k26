@@ -13,7 +13,7 @@ export default function HowItWorks() {
       <svg className="mb-8 h-8 w-full" viewBox="0 0 100 8">
         <motion.path
           d="M0 4 H100"
-          stroke="#6DBE8C"
+          stroke="#2E7D32"
           strokeWidth="1"
           fill="none"
           initial={{ pathLength: 0 }}

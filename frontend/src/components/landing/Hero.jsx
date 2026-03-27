@@ -6,7 +6,7 @@ const words = 'From Farm to Table. Without the Middleman.'.split(' ')
 
 export default function Hero() {
   return (
-    <section className="relative mx-auto mt-6 grid max-w-6xl gap-8 rounded-[12px] bg-[linear-gradient(135deg,#2E7D32,#66BB6A)] px-8 py-16 text-white shadow-card md:grid-cols-2">
+    <section className="relative mx-auto mt-6 grid max-w-6xl gap-8 rounded-[12px] bg-[linear-gradient(135deg,#2E7D32,#6D544C)] px-8 py-16 text-white shadow-card md:grid-cols-2">
       <div>
         <span className="mb-5 inline-flex rounded-full border border-white/30 bg-white/10 px-4 py-1 text-sm">500+ farms · 1,200+ buyers</span>
         <motion.h1
