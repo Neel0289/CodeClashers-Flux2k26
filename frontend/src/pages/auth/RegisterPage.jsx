@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { register } from '../../api/auth'
 import Button from '../../components/shared/Button'
 import Input from '../../components/shared/Input'
+import useAuth from '../../hooks/useAuth'
 
 const roleCards = [
   ['farmer', 'Farmer'],
@@ -14,6 +15,7 @@ const roleCards = [
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const { setUser } = useAuth()
   const [step, setStep] = useState(1)
   const [role, setRole] = useState('farmer')
   const [submitting, setSubmitting] = useState(false)
@@ -33,6 +35,7 @@ export default function RegisterPage() {
       const { data } = await register(payload)
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)
+      setUser(data.user)
       navigate(`/${role}/dashboard`)
     } catch (err) {
       const details = err?.response?.data

@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import { login } from '../../api/auth'
 import Button from '../../components/shared/Button'
 import Input from '../../components/shared/Input'
+import useAuth from '../../hooks/useAuth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { setUser } = useAuth()
   const [error, setError] = useState('')
 
   const submit = async (event) => {
@@ -19,6 +21,7 @@ export default function LoginPage() {
       const { data } = await login(payload)
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)
+      setUser(data.user)
       navigate(`/${data.user.role}/dashboard`)
     } catch {
       setError('Invalid credentials')
