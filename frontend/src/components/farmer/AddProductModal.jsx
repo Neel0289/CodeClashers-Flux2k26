@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import Button from '../shared/Button'
 import Card from '../shared/Card'
+import { CATEGORIES, PRODUCT_OPTIONS } from './productCatalog'
 
-const CATEGORIES = [
-  { value: 'vegetables', label: 'Vegetables' },
-  { value: 'fruits', label: 'Fruits' },
-  { value: 'grains', label: 'Grains' },
-  { value: 'spices', label: 'Spices' },
-  { value: 'dairy', label: 'Dairy' },
-]
+const DEFAULT_CATEGORY = 'vegetables'
+const getFirstProduct = (category) => PRODUCT_OPTIONS[category]?.[0] || ''
 
 const UNITS = [
   { value: 'kg', label: 'KG' },
@@ -18,9 +14,9 @@ const UNITS = [
 
 export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) {
   const [formData, setFormData] = useState({
-    name: '',
+    name: getFirstProduct(DEFAULT_CATEGORY),
     description: '',
-    category: 'vegetables',
+    category: DEFAULT_CATEGORY,
     base_price: '',
     quantity_available: '',
     unit: 'kg',
@@ -30,7 +26,16 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      if (name === 'category') {
+        return {
+          ...prev,
+          category: value,
+          name: getFirstProduct(value),
+        }
+      }
+      return { ...prev, [name]: value }
+    })
     setError('')
   }
 
@@ -57,9 +62,9 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
 
     await onSubmit(formData)
     setFormData({
-      name: '',
+      name: getFirstProduct(DEFAULT_CATEGORY),
       description: '',
-      category: 'vegetables',
+      category: DEFAULT_CATEGORY,
       base_price: '',
       quantity_available: '',
       unit: 'kg',
@@ -88,14 +93,18 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-text mb-2">Product Name</label>
-              <input
-                type="text"
+              <select
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="e.g., Organic Tomatoes"
-                className="w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text transition-colors focus:border-accent focus:outline-none"
-              />
+                className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text transition-colors focus:border-accent focus:outline-none"
+              >
+                {(PRODUCT_OPTIONS[formData.category] || []).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-2">Category</label>

@@ -30,6 +30,8 @@ class BuyerProfile(models.Model):
 	business_type = models.CharField(max_length=50, choices=[('restaurant', 'Restaurant'), ('store', 'Store')])
 	state = models.CharField(max_length=100)
 	city = models.CharField(max_length=100)
+	latitude = models.FloatField(null=True, blank=True)
+	longitude = models.FloatField(null=True, blank=True)
 
 
 class LogisticsProfile(models.Model):

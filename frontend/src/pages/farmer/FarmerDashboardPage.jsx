@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CircleMarker, MapContainer, Polyline, TileLayer } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 
+import { createLogisticsRequest, declineRequest, getLogisticsRequests, getPartners } from '../../api/logistics'
 import { getNegotiations, respondNegotiation } from '../../api/negotiations'
-import { getOrders } from '../../api/orders'
+import { getOrders, setOrderLocations } from '../../api/orders'
+import { createLogisticsCheckout, verifyLogisticsCheckout } from '../../api/payments'
 import { createProduct, updateProduct, deleteProduct, getProducts } from '../../api/products'
 import AddProductModal from '../../components/farmer/AddProductModal'
 import EditProductModal from '../../components/farmer/EditProductModal'
@@ -16,6 +19,24 @@ function formatStatus(value) {
   return String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+const INDIA_CENTER = [22.9734, 78.6569]
+const geocodeCache = new Map()
+
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
 }
 
 export default function FarmerDashboardPage() {
@@ -33,14 +54,53 @@ export default function FarmerDashboardPage() {
   const [deleteError, setDeleteError] = useState('')
   const [counterPrices, setCounterPrices] = useState({})
   const [actionLoadingId, setActionLoadingId] = useState(null)
+  const [logisticsRequests, setLogisticsRequests] = useState([])
+  const [bookingForm, setBookingForm] = useState({
+    orderId: '',
+  })
+  const [partners, setPartners] = useState([])
+  const [selectedPartnerId, setSelectedPartnerId] = useState('')
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [partnerSearchLoading, setPartnerSearchLoading] = useState(false)
+  const [bookingMessage, setBookingMessage] = useState('')
+  const [bookingError, setBookingError] = useState('')
+  const [quoteActionLoadingId, setQuoteActionLoadingId] = useState(null)
+  const [showPaymentAnimation, setShowPaymentAnimation] = useState(false)
+  const [paymentAnimationMessage, setPaymentAnimationMessage] = useState('Preparing secure payment...')
+  const [pickupCoords, setPickupCoords] = useState(null)
+  const [dropCoords, setDropCoords] = useState(null)
+  const [mapPreviewLoading, setMapPreviewLoading] = useState(false)
+  const [requestingOrderId, setRequestingOrderId] = useState(null)
+  const partnersSectionRef = useRef(null)
+  const celebratedPaidOrdersRef = useRef(new Set())
+  const knownOrderIdsRef = useRef(new Set())
+  const hasPrimedOrderRefsRef = useRef(false)
+  const paymentAnimationTimeoutRef = useRef(null)
 
-  const loadDashboard = async () => {
-    setLoading(true)
+  const triggerFarmerCoinAnimation = (message) => {
+    if (paymentAnimationTimeoutRef.current) {
+      clearTimeout(paymentAnimationTimeoutRef.current)
+      paymentAnimationTimeoutRef.current = null
+    }
+
+    setPaymentAnimationMessage(message)
+    setShowPaymentAnimation(true)
+    paymentAnimationTimeoutRef.current = setTimeout(() => {
+      setShowPaymentAnimation(false)
+      paymentAnimationTimeoutRef.current = null
+    }, 1900)
+  }
+
+  const loadDashboard = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true)
+    }
     setError('')
-    const [productsRes, negotiationsRes, ordersRes] = await Promise.allSettled([
+    const [productsRes, negotiationsRes, ordersRes, logisticsRes] = await Promise.allSettled([
       getProducts(),
       getNegotiations(),
       getOrders(),
+      getLogisticsRequests(),
     ])
 
     if (productsRes.status === 'fulfilled') {
@@ -52,16 +112,115 @@ export default function FarmerDashboardPage() {
     if (ordersRes.status === 'fulfilled') {
       setOrders(Array.isArray(ordersRes.value.data) ? ordersRes.value.data : [])
     }
+    if (logisticsRes.status === 'fulfilled') {
+      setLogisticsRequests(Array.isArray(logisticsRes.value.data) ? logisticsRes.value.data : [])
+    }
 
     if (productsRes.status === 'rejected' && negotiationsRes.status === 'rejected') {
       setError('Could not load dashboard data. Please refresh.')
     }
-    setLoading(false)
+    if (!silent) {
+      setLoading(false)
+    }
+  }
+
+  const loadInitialPartners = async () => {
+    try {
+      const { data } = await getPartners({})
+      const partnerRows = Array.isArray(data) ? data : []
+      setPartners(partnerRows)
+      setSelectedPartnerId('')
+    } catch {
+      setPartners([])
+      setSelectedPartnerId('')
+    }
   }
 
   useEffect(() => {
     loadDashboard()
+    loadInitialPartners()
   }, [])
+
+  useEffect(() => {
+    const refreshDashboard = () => {
+      loadDashboard({ silent: true })
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshDashboard()
+      }
+    }
+
+    const intervalId = setInterval(refreshDashboard, 6000)
+    window.addEventListener('focus', refreshDashboard)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refreshDashboard)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (paymentAnimationTimeoutRef.current) {
+        clearTimeout(paymentAnimationTimeoutRef.current)
+        paymentAnimationTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return
+    }
+
+    if (!hasPrimedOrderRefsRef.current) {
+      for (const order of orders) {
+        knownOrderIdsRef.current.add(order.id)
+        const isPaid = order.payment_status === 'escrow' || order.payment_status === 'released'
+        if (isPaid) {
+          celebratedPaidOrdersRef.current.add(order.id)
+        }
+      }
+      hasPrimedOrderRefsRef.current = true
+      return
+    }
+
+    const newlyArrivedOrders = orders.filter((order) => !knownOrderIdsRef.current.has(order.id))
+    for (const order of newlyArrivedOrders) {
+      knownOrderIdsRef.current.add(order.id)
+    }
+
+    const newlyPaidOrders = orders.filter((order) => {
+      const isPaid = order.payment_status === 'escrow' || order.payment_status === 'released'
+      return isPaid && !celebratedPaidOrdersRef.current.has(order.id)
+    })
+
+    if (newlyPaidOrders.length === 0) {
+      if (newlyArrivedOrders.length > 0) {
+        const firstNewOrder = newlyArrivedOrders[0]
+        const buyerName = firstNewOrder?.buyer_name || 'Customer'
+        const amount = Number(firstNewOrder?.agreed_price || 0)
+        const suffix = newlyArrivedOrders.length > 1 ? ` (+${newlyArrivedOrders.length - 1} more)` : ''
+        triggerFarmerCoinAnimation(`New order from ${buyerName}: ₹${amount.toFixed(2)}${suffix}`)
+      }
+      return
+    }
+
+    for (const paidOrder of newlyPaidOrders) {
+      celebratedPaidOrdersRef.current.add(paidOrder.id)
+    }
+
+    const firstOrder = newlyPaidOrders[0]
+    const buyerName = firstOrder?.buyer_name || 'Customer'
+    const amount = Number(firstOrder?.agreed_price || 0)
+    const suffix = newlyPaidOrders.length > 1 ? ` (+${newlyPaidOrders.length - 1} more)` : ''
+
+    triggerFarmerCoinAnimation(`Payment received from ${buyerName}: ₹${amount.toFixed(2)}${suffix}`)
+  }, [orders])
 
   const handleAddProduct = async (formData) => {
     setIsSubmitting(true)
@@ -130,6 +289,18 @@ export default function FarmerDashboardPage() {
     return total / qty
   }
 
+  const getLatestMessage = (negotiation) => {
+    if (!Array.isArray(negotiation?.messages) || negotiation.messages.length === 0) return null
+    return negotiation.messages[negotiation.messages.length - 1]
+  }
+
+  const canFarmerAct = (negotiation) => {
+    if (!['open', 'countered'].includes(negotiation.status)) return false
+    const latest = getLatestMessage(negotiation)
+    if (!latest) return true
+    return Number(latest.sender) !== Number(user?.id)
+  }
+
   const handleNegotiationAction = async (negotiation, action) => {
     setError('')
     setActionLoadingId(negotiation.id)
@@ -164,6 +335,278 @@ export default function FarmerDashboardPage() {
     }
   }
 
+  const geocodeLocation = async (query) => {
+    if (!query) return null
+    if (geocodeCache.has(query)) return geocodeCache.get(query)
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+      },
+    )
+    if (!response.ok) return null
+    const data = await response.json()
+    const first = data?.[0]
+    if (!first) {
+      geocodeCache.set(query, null)
+      return null
+    }
+    const coords = { lat: Number(first.lat), lon: Number(first.lon) }
+    geocodeCache.set(query, coords)
+    return coords
+  }
+
+  const resolveOrderRoute = (order) => {
+    if (!order) return null
+
+    const pickup_city = order.pickup_city || order.farmer_city || ''
+    const pickup_state = order.pickup_state || order.farmer_state || ''
+    const drop_city = order.drop_city || order.buyer_city || ''
+    const drop_state = order.drop_state || order.buyer_state || ''
+
+    return {
+      pickup_city,
+      pickup_state,
+      drop_city,
+      drop_state,
+      pickup_latitude: order.farmer_latitude,
+      pickup_longitude: order.farmer_longitude,
+      drop_latitude: order.buyer_latitude,
+      drop_longitude: order.buyer_longitude,
+    }
+  }
+
+  useEffect(() => {
+    const loadMapPreview = async () => {
+      if (!bookingForm.orderId) {
+        setPickupCoords(null)
+        setDropCoords(null)
+        return
+      }
+
+      const order = orders.find((item) => String(item.id) === String(bookingForm.orderId))
+      const route = resolveOrderRoute(order)
+      if (!route) {
+        setPickupCoords(null)
+        setDropCoords(null)
+        return
+      }
+
+      setMapPreviewLoading(true)
+      try {
+        let pickup = null
+        let drop = null
+
+        if (typeof route.pickup_latitude === 'number' && typeof route.pickup_longitude === 'number') {
+          pickup = { lat: route.pickup_latitude, lon: route.pickup_longitude }
+        } else if (route.pickup_city && route.pickup_state) {
+          pickup = await geocodeLocation(`${route.pickup_city}, ${route.pickup_state}, India`)
+        }
+
+        if (typeof route.drop_latitude === 'number' && typeof route.drop_longitude === 'number') {
+          drop = { lat: route.drop_latitude, lon: route.drop_longitude }
+        } else if (route.drop_city && route.drop_state) {
+          drop = await geocodeLocation(`${route.drop_city}, ${route.drop_state}, India`)
+        }
+
+        setPickupCoords(pickup)
+        setDropCoords(drop)
+      } catch {
+        setPickupCoords(null)
+        setDropCoords(null)
+      } finally {
+        setMapPreviewLoading(false)
+      }
+    }
+
+    loadMapPreview()
+  }, [bookingForm.orderId, orders])
+
+  const handleFindPartners = async (orderIdOverride = null) => {
+    setBookingError('')
+    setBookingMessage('')
+    const targetOrderId = orderIdOverride || bookingForm.orderId
+    if (!targetOrderId) {
+      setBookingError('Please select an order first.')
+      return
+    }
+
+    if (orderIdOverride) {
+      setBookingForm((prev) => ({ ...prev, orderId: String(orderIdOverride) }))
+    }
+
+    const selectedOrder = orders.find((item) => String(item.id) === String(targetOrderId))
+    const route = resolveOrderRoute(selectedOrder)
+    if (!route?.pickup_state || !route?.pickup_city || !route?.drop_state || !route?.drop_city) {
+      setBookingError('Default pickup/drop address is missing. Ensure farmer and customer profiles have city and state.')
+      return
+    }
+
+    const derivedWeight = selectedOrder?.quantity
+
+    setPartnerSearchLoading(true)
+    try {
+      await setOrderLocations(targetOrderId, {
+        pickup_state: route.pickup_state,
+        pickup_city: route.pickup_city,
+        drop_state: route.drop_state,
+        drop_city: route.drop_city,
+      })
+
+      const { data } = await getPartners({
+        pickup_state: route.pickup_state,
+        drop_state: route.drop_state,
+        weight: derivedWeight || undefined,
+      })
+
+      const partnerRows = Array.isArray(data) ? data : []
+      setPartners(partnerRows)
+      setSelectedPartnerId('')
+      if (partnerRows.length === 0) {
+        setBookingError('No logistics partners found for the selected route/weight.')
+      }
+    } catch (err) {
+      setBookingError(err?.response?.data?.detail || 'Could not find partners. Please try again.')
+      setPartners([])
+    } finally {
+      setPartnerSearchLoading(false)
+    }
+  }
+
+  const handleSelectOrderForLogistics = async (orderId) => {
+    await handleFindPartners(orderId)
+    requestAnimationFrame(() => {
+      partnersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  const handleRequestLogistics = async () => {
+    setBookingError('')
+    setBookingMessage('')
+    if (!bookingForm.orderId) {
+      setBookingError('Please select an order first.')
+      return
+    }
+
+    const order = orders.find((item) => String(item.id) === String(bookingForm.orderId))
+    const route = resolveOrderRoute(order)
+    if (!route?.pickup_state || !route?.pickup_city || !route?.drop_state || !route?.drop_city) {
+      setBookingError('Cannot request logistics because default pickup/drop address is missing.')
+      return
+    }
+
+    setBookingLoading(true)
+    setRequestingOrderId(String(bookingForm.orderId))
+    try {
+      await setOrderLocations(bookingForm.orderId, {
+        pickup_state: route.pickup_state,
+        pickup_city: route.pickup_city,
+        drop_state: route.drop_state,
+        drop_city: route.drop_city,
+      })
+
+      const { data } = await createLogisticsRequest({
+        order_id: bookingForm.orderId,
+        logistics_partner_id: selectedPartnerId || undefined,
+        crop_description: `Delivery for ${order?.product_name || 'order'} (${order?.quantity || 0} kg)`,
+        weight_kg: Number(order?.quantity || 0),
+      })
+      const createdCount = Array.isArray(data) ? data.length : 0
+      setBookingMessage(
+        createdCount > 0
+          ? `Logistics request sent to ${createdCount} partners.`
+          : 'Logistics request sent successfully.',
+      )
+      setPartners([])
+      setSelectedPartnerId('')
+      await loadDashboard()
+    } catch (err) {
+      setBookingError(err?.response?.data?.detail || 'Could not send logistics request.')
+    } finally {
+      setBookingLoading(false)
+      setRequestingOrderId(null)
+    }
+  }
+
+  const handleFarmerQuoteResponse = async (requestId, action) => {
+    setBookingError('')
+    setBookingMessage('')
+    setQuoteActionLoadingId(requestId)
+    try {
+      if (action === 'accept') {
+        setPaymentAnimationMessage('Preparing secure Razorpay checkout...')
+        setShowPaymentAnimation(true)
+
+        const scriptLoaded = await loadRazorpayScript()
+        if (!scriptLoaded) {
+          setBookingError('Could not load Razorpay checkout. Please try again.')
+          setQuoteActionLoadingId(null)
+          setShowPaymentAnimation(false)
+          return
+        }
+
+        const { data: checkoutData } = await createLogisticsCheckout(requestId)
+        setPaymentAnimationMessage('Launching payment portal...')
+
+        const paymentResult = await new Promise((resolve, reject) => {
+          const razorpay = new window.Razorpay({
+            key: checkoutData.key,
+            amount: checkoutData.amount,
+            currency: checkoutData.currency,
+            order_id: checkoutData.razorpay_order_id,
+            name: checkoutData.name,
+            description: checkoutData.description,
+            prefill: checkoutData.prefill,
+            theme: checkoutData.theme,
+            handler: (response) => {
+              setShowPaymentAnimation(false)
+              resolve(response)
+            },
+            modal: {
+              ondismiss: () => {
+                setShowPaymentAnimation(false)
+                reject(new Error('PAYMENT_CANCELLED'))
+              },
+            },
+          })
+
+          razorpay.on('payment.failed', (event) => {
+            setShowPaymentAnimation(false)
+            reject(new Error(event?.error?.description || 'Payment failed.'))
+          })
+
+          setTimeout(() => {
+            razorpay.open()
+          }, 600)
+        })
+
+        await verifyLogisticsCheckout(requestId, {
+          razorpay_order_id: paymentResult.razorpay_order_id,
+          razorpay_payment_id: paymentResult.razorpay_payment_id,
+          razorpay_signature: paymentResult.razorpay_signature,
+        })
+
+        setBookingMessage('Payment successful. Logistics quote accepted.')
+      } else {
+        await declineRequest(requestId)
+        setBookingMessage('Logistics quote declined. Please select another partner.')
+      }
+      await loadDashboard()
+    } catch (err) {
+      if (err?.message === 'PAYMENT_CANCELLED') {
+        setBookingError('Payment cancelled. Logistics quote is still pending.')
+      } else {
+        setBookingError(err?.response?.data?.detail || err?.message || 'Could not update logistics quote status.')
+      }
+    } finally {
+      setQuoteActionLoadingId(null)
+      setShowPaymentAnimation(false)
+    }
+  }
+
   const stats = useMemo(() => {
     const activeListings = products.filter((p) => p.is_available).length
     const openNegotiations = negotiations.filter((n) => ['open', 'countered'].includes(n.status)).length
@@ -183,6 +626,30 @@ export default function FarmerDashboardPage() {
   const recentListings = useMemo(() => products.slice(0, 5), [products])
   const recentNegotiations = useMemo(() => negotiations.slice(0, 5), [negotiations])
   const recentOrders = useMemo(() => orders.slice(0, 5), [orders])
+  const recentLogisticsRequests = useMemo(() => logisticsRequests.slice(0, 5), [logisticsRequests])
+  const acceptedLogisticsCount = useMemo(
+    () => logisticsRequests.filter((request) => request.status === 'accepted').length,
+    [logisticsRequests],
+  )
+  const acceptedRequestOrderIds = useMemo(
+    () => new Set(logisticsRequests.filter((request) => request.status === 'accepted').map((request) => Number(request.order))),
+    [logisticsRequests],
+  )
+  const activeRequestOrderIds = useMemo(
+    () => new Set(logisticsRequests.filter((request) => ['pending', 'quoted'].includes(request.status)).map((request) => Number(request.order))),
+    [logisticsRequests],
+  )
+  const selectedOrder = useMemo(
+    () => orders.find((item) => String(item.id) === String(bookingForm.orderId)) || null,
+    [orders, bookingForm.orderId],
+  )
+  const selectedOrderRoute = useMemo(() => resolveOrderRoute(selectedOrder), [selectedOrder])
+
+  const canRequestLogisticsForOrder = (order) => {
+    return ['confirmed', 'logistics_pending'].includes(order.status)
+      && !acceptedRequestOrderIds.has(Number(order.id))
+      && !activeRequestOrderIds.has(Number(order.id))
+  }
 
   const handleLogout = () => {
     logout()
@@ -254,7 +721,7 @@ export default function FarmerDashboardPage() {
           </Card>
 
           <Card>
-            <p className="mb-4 text-lg font-semibold">Recent Negotiations</p>
+            <p className="mb-4 text-lg font-semibold">Negotiated Orders</p>
             {loading && <p className="text-sm text-text-muted">Loading negotiations...</p>}
             {!loading && recentNegotiations.length === 0 && (
               <p className="text-sm text-text-muted">No negotiations yet.</p>
@@ -276,7 +743,7 @@ export default function FarmerDashboardPage() {
                       <StatusBadge status={negotiation.status} />
                     </div>
 
-                    {['open', 'countered'].includes(negotiation.status) && (
+                    {canFarmerAct(negotiation) && (
                       <div className="mt-2 space-y-2">
                         <div className="flex items-center gap-2">
                           <input
@@ -315,6 +782,9 @@ export default function FarmerDashboardPage() {
                         </div>
                       </div>
                     )}
+                    {['open', 'countered'].includes(negotiation.status) && !canFarmerAct(negotiation) && (
+                      <p className="mt-2 text-xs text-text-muted">Waiting for buyer response.</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -322,7 +792,7 @@ export default function FarmerDashboardPage() {
           </Card>
 
           <Card>
-            <p className="mb-4 text-lg font-semibold">Incoming Orders</p>
+            <p className="mb-4 text-lg font-semibold">Orders</p>
             {loading && <p className="text-sm text-text-muted">Loading orders...</p>}
             {!loading && recentOrders.length === 0 && (
               <p className="text-sm text-text-muted">No orders yet.</p>
@@ -341,7 +811,220 @@ export default function FarmerDashboardPage() {
                         <p className="text-xs text-text-muted">How much: {order.quantity} kg</p>
                         <p className="text-xs text-text-muted">Order value: ₹{order.agreed_price}</p>
                       </div>
-                      <StatusBadge status={order.status} />
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusBadge status={order.status} />
+                        {String(requestingOrderId) === String(order.id) && (
+                          <p className="text-xs font-medium text-amber-700">Sending Request...</p>
+                        )}
+                        {String(requestingOrderId) !== String(order.id) && activeRequestOrderIds.has(Number(order.id)) && (
+                          <p className="text-xs font-medium text-blue-700">Request Sent</p>
+                        )}
+                        {canRequestLogisticsForOrder(order) && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectOrderForLogistics(order.id)}
+                            disabled={partnerSearchLoading}
+                            className="rounded-[8px] bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800 disabled:opacity-60"
+                          >
+                            {partnerSearchLoading && String(bookingForm.orderId) === String(order.id)
+                              ? 'Loading...'
+                              : 'Select Logistics'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <Card>
+            <p className="mb-4 text-lg font-semibold">Request Logistics</p>
+
+            <div className="grid gap-3">
+              {!selectedOrder && (
+                <p className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
+                  Click Select Logistics beside an order to continue.
+                </p>
+              )}
+              {selectedOrder && (
+                <div className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                  <p className="font-medium">Selected Order: #{selectedOrder.id}</p>
+                  <p>Customer: {selectedOrder.buyer_name || `Buyer #${selectedOrder.buyer}`} | Product: {selectedOrder.product_name}</p>
+                  <p>Quantity: {selectedOrder.quantity} kg | Value: ₹{selectedOrder.agreed_price}</p>
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-sm font-medium text-text-primary">Pickup Address (Default Farmer)</p>
+                  <p className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                    {selectedOrderRoute?.pickup_city && selectedOrderRoute?.pickup_state
+                      ? `${selectedOrderRoute.pickup_city}, ${selectedOrderRoute.pickup_state}`
+                      : 'Not available'}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-sm font-medium text-text-primary">Drop Address (Default Customer)</p>
+                  <p className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                    {selectedOrderRoute?.drop_city && selectedOrderRoute?.drop_state
+                      ? `${selectedOrderRoute.drop_city}, ${selectedOrderRoute.drop_state}`
+                      : 'Not available'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[12px] border border-border bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-text-primary">Pickup & Drop Route Preview</p>
+                </div>
+                <p className="mt-1 text-xs text-text-muted">
+                  Route is automatically taken from farmer address (pickup) and customer address (drop).
+                  {mapPreviewLoading ? ' | Loading map preview...' : ''}
+                </p>
+                <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                  {!showPaymentAnimation && (
+                    <MapContainer
+                      key={`${pickupCoords?.lat || 'p0'}-${dropCoords?.lat || 'd0'}-${bookingForm.orderId || 'none'}`}
+                      center={pickupCoords ? [pickupCoords.lat, pickupCoords.lon] : INDIA_CENTER}
+                      zoom={pickupCoords ? 7 : 5}
+                      scrollWheelZoom
+                      className="h-full w-full"
+                    >
+                      <TileLayer
+                        attribution='&copy; OpenStreetMap contributors'
+                        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                      />
+                      {pickupCoords && (
+                        <CircleMarker
+                          center={[pickupCoords.lat, pickupCoords.lon]}
+                          radius={7}
+                          pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.85 }}
+                        />
+                      )}
+                      {dropCoords && (
+                        <CircleMarker
+                          center={[dropCoords.lat, dropCoords.lon]}
+                          radius={7}
+                          pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.85 }}
+                        />
+                      )}
+                      {pickupCoords && dropCoords && (
+                        <Polyline
+                          positions={[
+                            [pickupCoords.lat, pickupCoords.lon],
+                            [dropCoords.lat, dropCoords.lon],
+                          ]}
+                          pathOptions={{ color: '#0f766e', weight: 4 }}
+                        />
+                      )}
+                    </MapContainer>
+                  )}
+                  {showPaymentAnimation && (
+                    <div className="flex h-full items-center justify-center bg-surface-2 text-sm text-text-muted">
+                      Payment in progress... map hidden.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={handleFindPartners} disabled={partnerSearchLoading}>
+                  {partnerSearchLoading ? 'Finding...' : 'Find Logistics For This Order'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleRequestLogistics}
+                  disabled={bookingLoading || !selectedOrder}
+                  className="bg-emerald-700 hover:bg-emerald-800"
+                >
+                  {bookingLoading
+                    ? 'Sending Request...'
+                    : selectedPartnerId
+                      ? 'Request Selected Partner'
+                      : 'Request All Matching Partners'}
+                </Button>
+              </div>
+            </div>
+
+            {bookingError && <p className="mt-3 text-sm text-red-600">{bookingError}</p>}
+            {bookingMessage && <p className="mt-3 text-sm text-green-700">{bookingMessage}</p>}
+
+            <div ref={partnersSectionRef} className="mt-4 space-y-2">
+              <p className="text-sm font-medium text-text-primary">Available Partners</p>
+              {partners.length === 0 && (
+                <p className="text-xs text-text-muted">No logistics partners found for this default route yet.</p>
+              )}
+              {partners.map((partner) => (
+                <button
+                  key={partner.id}
+                  type="button"
+                  onClick={() => setSelectedPartnerId(String(partner.logistics_partner_id || partner.id))}
+                  className={`w-full rounded-[10px] border p-2 text-left transition-colors ${String(selectedPartnerId) === String(partner.logistics_partner_id || partner.id) ? 'border-emerald-600 bg-emerald-50' : 'border-border hover:border-emerald-300'}`}
+                >
+                  <div className="text-xs text-text-primary">
+                    <p className="font-medium">
+                      {partner.partner_name}
+                      {String(selectedPartnerId) === String(partner.logistics_partner_id || partner.id) ? ' (Selected)' : ''}
+                    </p>
+                    <p>Vehicle: {formatStatus(partner.vehicle_type)} | Max: {partner.max_weight_kg} kg</p>
+                    <p>States: {(partner.operating_states || []).join(', ')}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <p className="mb-4 text-lg font-semibold">Requested Logistics</p>
+            {acceptedLogisticsCount > 0 && (
+              <p className="mb-2 text-sm text-green-700">
+                {acceptedLogisticsCount} logistics request{acceptedLogisticsCount > 1 ? 's have' : ' has'} been accepted.
+              </p>
+            )}
+            {recentLogisticsRequests.length === 0 && (
+              <p className="text-sm text-text-muted">No logistics requests yet.</p>
+            )}
+            {recentLogisticsRequests.length > 0 && (
+              <div className="space-y-3">
+                {recentLogisticsRequests.map((request) => (
+                  <div key={request.id} className="rounded-[12px] border border-border px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">Partner: {request.logistics_partner_name || `#${request.logistics_partner}`}</p>
+                        <p className="text-xs text-text-muted">Order: #{request.order} | Weight: {request.weight_kg} kg</p>
+                        {request.quoted_fee && (
+                          <p className="text-xs text-amber-700">Quoted Logistics Price: ₹{request.quoted_fee}</p>
+                        )}
+                        <p className="text-xs text-text-muted">Route: {request.pickup_city}, {request.pickup_state} {'->'} {request.drop_city}, {request.drop_state}</p>
+                        {request.status === 'accepted' && (
+                          <p className="text-xs text-green-700">This logistics partner accepted your request.</p>
+                        )}
+                        {request.status === 'quoted' && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={quoteActionLoadingId === request.id}
+                              onClick={() => handleFarmerQuoteResponse(request.id, 'accept')}
+                              className="rounded-[8px] bg-green-700 px-2 py-1 text-xs text-white hover:bg-green-800 disabled:opacity-60"
+                            >
+                              {quoteActionLoadingId === request.id ? 'Saving...' : 'Accept Quote'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={quoteActionLoadingId === request.id}
+                              onClick={() => handleFarmerQuoteResponse(request.id, 'decline')}
+                              className="rounded-[8px] bg-red-700 px-2 py-1 text-xs text-white hover:bg-red-800 disabled:opacity-60"
+                            >
+                              {quoteActionLoadingId === request.id ? 'Saving...' : 'Decline Quote'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <StatusBadge status={request.status} />
                     </div>
                   </div>
                 ))}
@@ -350,6 +1033,21 @@ export default function FarmerDashboardPage() {
           </Card>
         </div>
       </PageShell>
+
+      {showPaymentAnimation && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-[16px] bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto coin-loader" />
+            <p className="mt-4 text-lg font-semibold text-text-primary">Redirecting To Razorpay</p>
+            <p className="mt-1 text-sm text-text-muted">{paymentAnimationMessage}</p>
+            <div className="mt-3 flex justify-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-600 animate-bounce [animation-delay:-0.2s]" />
+              <span className="h-2 w-2 rounded-full bg-emerald-600 animate-bounce [animation-delay:-0.1s]" />
+              <span className="h-2 w-2 rounded-full bg-emerald-600 animate-bounce" />
+            </div>
+          </div>
+        </div>
+      )}
 
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleAddProduct} loading={isSubmitting} />
 

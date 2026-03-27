@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { createNegotiation, getNegotiations, respondNegotiation } from '../../api/negotiations'
 import { createOrder, getOrders } from '../../api/orders'
+import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
 import { getProducts } from '../../api/products'
 import Button from '../../components/shared/Button'
 import Card from '../../components/shared/Card'
@@ -84,12 +85,16 @@ export default function BuyerDashboardPage() {
   const [buyerCoords, setBuyerCoords] = useState(null)
   const [mapLoading, setMapLoading] = useState(true)
   const [mapError, setMapError] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedItem, setSelectedItem] = useState('all')
   const [orderingId, setOrderingId] = useState(null)
   const [orderProduct, setOrderProduct] = useState(null)
   const [orderQuantity, setOrderQuantity] = useState('')
   const [orderMode, setOrderMode] = useState('direct')
   const [offerPerKg, setOfferPerKg] = useState('')
   const [orderFormError, setOrderFormError] = useState('')
+  const [showOrderAnimation, setShowOrderAnimation] = useState(false)
+  const [orderAnimationMessage, setOrderAnimationMessage] = useState('Preparing your order...')
   const [counterOffers, setCounterOffers] = useState({})
   const [negotiationActionId, setNegotiationActionId] = useState(null)
 
@@ -147,10 +152,37 @@ export default function BuyerDashboardPage() {
     loadMapData()
   }, [user])
 
+  const categoryOptions = useMemo(() => {
+    const set = new Set()
+    for (const product of farmerProducts) {
+      if (product.category) set.add(product.category)
+    }
+    return Array.from(set)
+  }, [farmerProducts])
+
+  const itemOptions = useMemo(() => {
+    const names = new Set()
+    for (const product of farmerProducts) {
+      const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory
+      if (categoryMatch && product.name) {
+        names.add(product.name)
+      }
+    }
+    return Array.from(names)
+  }, [farmerProducts, selectedCategory])
+
+  const filteredFarmerProducts = useMemo(() => {
+    return farmerProducts.filter((product) => {
+      const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory
+      const itemMatch = selectedItem === 'all' || product.name === selectedItem
+      return categoryMatch && itemMatch
+    })
+  }, [farmerProducts, selectedCategory, selectedItem])
+
   const nearbyFarmers = useMemo(() => {
     if (!buyerCoords) return []
     const grouped = new Map()
-    const rows = farmerProducts.filter((item) => item.city && item.state)
+    const rows = filteredFarmerProducts.filter((item) => item.city && item.state)
 
     for (const product of rows) {
       const key = String(product.farmer || `${product.city}|${product.state}|${product.farmer_name || 'unknown'}`)
@@ -170,7 +202,7 @@ export default function BuyerDashboardPage() {
     }
 
     return Array.from(grouped.values())
-  }, [buyerCoords, farmerProducts])
+  }, [buyerCoords, filteredFarmerProducts])
 
   const [farmerMarkers, setFarmerMarkers] = useState([])
 
@@ -239,6 +271,18 @@ export default function BuyerDashboardPage() {
     return total / qty
   }
 
+  const getLatestMessage = (negotiation) => {
+    if (!Array.isArray(negotiation?.messages) || negotiation.messages.length === 0) return null
+    return negotiation.messages[negotiation.messages.length - 1]
+  }
+
+  const canBuyerAct = (negotiation) => {
+    if (!['open', 'countered'].includes(negotiation.status)) return false
+    const latest = getLatestMessage(negotiation)
+    if (!latest) return true
+    return Number(latest.sender) !== Number(user?.id)
+  }
+
   const handleNegotiationAction = async (negotiation, action) => {
     setError('')
     setNegotiationActionId(negotiation.id)
@@ -287,12 +331,70 @@ export default function BuyerDashboardPage() {
     setOrderFormError('')
   }
 
+  const reloadDashboardData = async () => {
+    const [ordersRes, negotiationsRes, productsRes] = await Promise.allSettled([getOrders(), getNegotiations(), getProducts()])
+    if (ordersRes.status === 'fulfilled') {
+      setOrders(Array.isArray(ordersRes.value.data) ? ordersRes.value.data : [])
+    }
+    if (negotiationsRes.status === 'fulfilled') {
+      setNegotiations(Array.isArray(negotiationsRes.value.data) ? negotiationsRes.value.data : [])
+    }
+    if (productsRes.status === 'fulfilled') {
+      setFarmerProducts(Array.isArray(productsRes.value.data) ? productsRes.value.data : [])
+    }
+  }
+
+  const openRazorpayForOrder = async (order) => {
+    if (!window.Razorpay) {
+      throw new Error('Razorpay SDK failed to load. Refresh the page and try again.')
+    }
+    const { data: checkout } = await createOrderCheckout(order.id)
+
+    return new Promise((resolve, reject) => {
+      const razorpay = new window.Razorpay({
+        key: checkout.key,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        name: checkout.name,
+        description: checkout.description,
+        order_id: checkout.razorpay_order_id,
+        prefill: checkout.prefill,
+        theme: checkout.theme,
+        handler: async (response) => {
+          try {
+            await verifyOrderCheckout(order.id, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            })
+            resolve()
+          } catch {
+            reject(new Error('Payment verification failed. Please contact support with your payment ID.'))
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            reject(new Error('Payment popup closed.'))
+          },
+        },
+      })
+
+      razorpay.on('payment.failed', () => {
+        reject(new Error('Payment failed or was cancelled.'))
+      })
+
+      razorpay.open()
+    })
+  }
+
   const closeOrderForm = () => {
     setOrderProduct(null)
     setOrderQuantity('')
     setOrderMode('direct')
     setOfferPerKg('')
     setOrderFormError('')
+    setShowOrderAnimation(false)
+    setOrderAnimationMessage('Preparing your order...')
   }
 
   const submitOrderForm = async (event) => {
@@ -322,6 +424,8 @@ export default function BuyerDashboardPage() {
     setOrderingId(orderProduct.id)
     setOrderFormError('')
     setError('')
+    setShowOrderAnimation(true)
+    setOrderAnimationMessage(orderMode === 'direct' ? 'Creating order...' : 'Submitting negotiation...')
     try {
       if (orderMode === 'negotiate') {
         const offeredTotal = offeredPerKgValue * quantity
@@ -332,24 +436,18 @@ export default function BuyerDashboardPage() {
           message: `Negotiation request: ₹${offeredPerKgValue}/kg for ${quantity} kg.`,
         })
       } else {
-        await createOrder({ product: orderProduct.id, quantity })
+        const { data: order } = await createOrder({ product: orderProduct.id, quantity })
+        setOrderAnimationMessage('Opening secure Razorpay checkout...')
+        await openRazorpayForOrder(order)
+        setOrderAnimationMessage('Payment successful. Finalizing order...')
       }
 
-      const [ordersRes, productsRes] = await Promise.allSettled([getOrders(), getProducts()])
-      const negotiationsRes = await getNegotiations().catch(() => null)
-      if (ordersRes.status === 'fulfilled') {
-        setOrders(Array.isArray(ordersRes.value.data) ? ordersRes.value.data : [])
-      }
-      if (productsRes.status === 'fulfilled') {
-        setFarmerProducts(Array.isArray(productsRes.value.data) ? productsRes.value.data : [])
-      }
-      if (negotiationsRes?.data) {
-        setNegotiations(Array.isArray(negotiationsRes.data) ? negotiationsRes.data : [])
-      }
+      await reloadDashboardData()
       closeOrderForm()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Could not place order. Please try again.'
+      const msg = err?.message || err?.response?.data?.detail || 'Could not place order. Please try again.'
       setOrderFormError(msg)
+      setShowOrderAnimation(false)
     } finally {
       setOrderingId(null)
     }
@@ -417,7 +515,7 @@ export default function BuyerDashboardPage() {
                     <span className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text-primary">{formatStatus(item.status)}</span>
                   </div>
 
-                  {['open', 'countered'].includes(item.status) && (
+                  {canBuyerAct(item) && (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <input
                         type="number"
@@ -454,6 +552,9 @@ export default function BuyerDashboardPage() {
                       </button>
                     </div>
                   )}
+                  {['open', 'countered'].includes(item.status) && !canBuyerAct(item) && (
+                    <p className="mt-2 text-xs text-text-muted">Waiting for farmer response.</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -465,6 +566,37 @@ export default function BuyerDashboardPage() {
         <div className="mb-4 flex items-center justify-between">
           <p className="text-lg font-semibold">Nearby Farmers Map (OpenStreetMap)</p>
           <p className="text-sm text-text-muted">Radius: {NEARBY_RADIUS_KM} km</p>
+        </div>
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-text-primary">What are you looking for?</label>
+            <select
+              value={selectedCategory}
+              onChange={(event) => {
+                setSelectedCategory(event.target.value)
+                setSelectedItem('all')
+              }}
+              className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+            >
+              <option value="all">All Categories</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>{formatStatus(category)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-text-primary">Which item?</label>
+            <select
+              value={selectedItem}
+              onChange={(event) => setSelectedItem(event.target.value)}
+              className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+            >
+              <option value="all">All Items</option>
+              {itemOptions.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {mapLoading && <p className="text-sm text-text-muted">Loading map...</p>}
         {!mapLoading && mapError && <p className="text-sm text-red-600">{mapError}</p>}
@@ -544,6 +676,13 @@ export default function BuyerDashboardPage() {
             <p className="mt-2 text-sm text-text-muted">{orderProduct.name}</p>
             <p className="text-sm text-text-muted">Price: ₹{orderProduct.base_price}/kg</p>
             <p className="text-sm text-text-muted">Available: {orderProduct.quantity_available} kg</p>
+
+            {showOrderAnimation && (
+              <div className="mt-4 rounded-[12px] border border-emerald-200 bg-emerald-50/70 px-3 py-3 text-center">
+                <div className="mx-auto coin-loader" />
+                <p className="mt-2 text-sm font-medium text-emerald-800">{orderAnimationMessage}</p>
+              </div>
+            )}
 
             <form onSubmit={submitOrderForm} className="mt-4 space-y-3">
               <div>

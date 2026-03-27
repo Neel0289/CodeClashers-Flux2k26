@@ -1,15 +1,24 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { login } from '../../api/auth'
+import { googleLogin, login } from '../../api/auth'
 import Button from '../../components/shared/Button'
 import Input from '../../components/shared/Input'
 import useAuth from '../../hooks/useAuth'
+import { getGoogleIdentityToken } from '../../lib/firebase'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { setUser } = useAuth()
   const [error, setError] = useState('')
+  const [googleLoading, setGoogleLoading] = useState(false)
+
+  const completeAuth = (data) => {
+    localStorage.setItem('access', data.access)
+    localStorage.setItem('refresh', data.refresh)
+    setUser(data.user)
+    navigate(`/${data.user.role}/dashboard`)
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -19,12 +28,24 @@ export default function LoginPage() {
       const payload = Object.fromEntries(formData.entries())
       payload.email = String(payload.email || '').trim().toLowerCase()
       const { data } = await login(payload)
-      localStorage.setItem('access', data.access)
-      localStorage.setItem('refresh', data.refresh)
-      setUser(data.user)
-      navigate(`/${data.user.role}/dashboard`)
+      completeAuth(data)
     } catch {
       setError('Invalid credentials')
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true)
+    setError('')
+    try {
+      const { idToken } = await getGoogleIdentityToken()
+      const { data } = await googleLogin(idToken)
+      completeAuth(data)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setError(detail || err?.message || 'Google sign-in failed. Please try again.')
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -32,6 +53,16 @@ export default function LoginPage() {
     <main className="mx-auto max-w-md px-6 py-16">
       <h1 className="mb-6 font-display text-4xl">Welcome back</h1>
       <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-border bg-surface p-5">
+        <Button
+          type="button"
+          className="border border-border bg-white text-text-primary hover:bg-surface-2"
+          onClick={handleGoogleLogin}
+          disabled={googleLoading}
+        >
+          {googleLoading ? 'Signing in with Google...' : 'Sign in with Google'}
+        </Button>
+        <div className="my-1 text-center text-xs text-text-muted">or continue with email</div>
+
         <Input name="email" type="email" placeholder="Email" required />
         <Input name="password" type="password" placeholder="Password" required />
         {error && <p className="text-sm text-red-300">{error}</p>}

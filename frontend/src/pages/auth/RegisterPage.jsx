@@ -35,8 +35,9 @@ export default function RegisterPage() {
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState('')
   const [farmCoords, setFarmCoords] = useState({ latitude: '', longitude: '' })
+  const [buyerCoords, setBuyerCoords] = useState({ latitude: '', longitude: '' })
 
-  const requestCurrentLocation = () => {
+  const requestCurrentLocation = (target) => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported in this browser.')
       return
@@ -46,10 +47,15 @@ export default function RegisterPage() {
     setLocationError('')
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setFarmCoords({
+        const coords = {
           latitude: String(position.coords.latitude),
           longitude: String(position.coords.longitude),
-        })
+        }
+        if (target === 'buyer') {
+          setBuyerCoords(coords)
+        } else {
+          setFarmCoords(coords)
+        }
         setLocationLoading(false)
       },
       () => {
@@ -60,8 +66,12 @@ export default function RegisterPage() {
     )
   }
 
-  const handleMapPick = (lat, lon) => {
-    setFarmCoords({ latitude: String(lat), longitude: String(lon) })
+  const handleMapPick = (target, lat, lon) => {
+    if (target === 'buyer') {
+      setBuyerCoords({ latitude: String(lat), longitude: String(lon) })
+    } else {
+      setFarmCoords({ latitude: String(lat), longitude: String(lon) })
+    }
     setLocationError('')
   }
 
@@ -72,6 +82,14 @@ export default function RegisterPage() {
     const formData = new FormData(event.currentTarget)
     const payload = Object.fromEntries(formData.entries())
     payload.role = role
+    payload.email = String(payload.email || '').trim().toLowerCase()
+
+    if (!payload.password) {
+      setError('Password is required.')
+      setSubmitting(false)
+      return
+    }
+
     if (role === 'farmer') {
       if (!farmCoords.latitude || !farmCoords.longitude) {
         setError('Current location is required for farmer registration. Please fetch location and try again.')
@@ -80,6 +98,15 @@ export default function RegisterPage() {
       }
       payload.farm_latitude = Number(farmCoords.latitude)
       payload.farm_longitude = Number(farmCoords.longitude)
+    }
+    if (role === 'buyer') {
+      if (!buyerCoords.latitude || !buyerCoords.longitude) {
+        setError('Current location is required for buyer registration. Please fetch location and try again.')
+        setSubmitting(false)
+        return
+      }
+      payload.buyer_latitude = Number(buyerCoords.latitude)
+      payload.buyer_longitude = Number(buyerCoords.longitude)
     }
     if (payload.operating_states) {
       payload.operating_states = payload.operating_states.split(',').map((s) => s.trim()).filter(Boolean)
@@ -138,7 +165,7 @@ export default function RegisterPage() {
                   </p>
                   {locationError && <p className="mt-2 text-xs text-red-600">{locationError}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" onClick={requestCurrentLocation} disabled={locationLoading}>
+                    <Button type="button" onClick={() => requestCurrentLocation('farmer')} disabled={locationLoading}>
                       {locationLoading ? 'Fetching Location...' : 'Use Current Location'}
                     </Button>
                     <p className="self-center text-xs text-text-muted">or select by clicking on map below</p>
@@ -149,7 +176,7 @@ export default function RegisterPage() {
                         attribution='&copy; OpenStreetMap contributors'
                         url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
                       />
-                      <LocationPicker onPick={handleMapPick} />
+                      <LocationPicker onPick={(lat, lon) => handleMapPick('farmer', lat, lon)} />
                       {farmCoords.latitude && farmCoords.longitude && (
                         <CircleMarker
                           center={[Number(farmCoords.latitude), Number(farmCoords.longitude)]}
@@ -172,6 +199,35 @@ export default function RegisterPage() {
                 </select>
                 <Input name="state" placeholder="State" required />
                 <Input name="city" placeholder="City" required />
+                <div className="rounded-[12px] border border-border bg-white p-3">
+                  <p className="text-sm font-medium text-text-primary">Business Location (Required)</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Latitude: {buyerCoords.latitude || '--'} | Longitude: {buyerCoords.longitude || '--'}
+                  </p>
+                  {locationError && <p className="mt-2 text-xs text-red-600">{locationError}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => requestCurrentLocation('buyer')} disabled={locationLoading}>
+                      {locationLoading ? 'Fetching Location...' : 'Use Current Location'}
+                    </Button>
+                    <p className="self-center text-xs text-text-muted">or select by clicking on map below</p>
+                  </div>
+                  <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                    <MapContainer center={INDIA_CENTER} zoom={5} scrollWheelZoom className="h-full w-full">
+                      <TileLayer
+                        attribution='&copy; OpenStreetMap contributors'
+                        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                      />
+                      <LocationPicker onPick={(lat, lon) => handleMapPick('buyer', lat, lon)} />
+                      {buyerCoords.latitude && buyerCoords.longitude && (
+                        <CircleMarker
+                          center={[Number(buyerCoords.latitude), Number(buyerCoords.longitude)]}
+                          radius={8}
+                          pathOptions={{ color: '#1d4ed8', fillColor: '#1d4ed8', fillOpacity: 0.85 }}
+                        />
+                      )}
+                    </MapContainer>
+                  </div>
+                </div>
               </>
             )}
             {role === 'logistics' && (

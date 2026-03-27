@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react'
 import Button from '../shared/Button'
 import Card from '../shared/Card'
+import { CATEGORIES, PRODUCT_OPTIONS } from './productCatalog'
 
-const CATEGORIES = [
-  { value: 'vegetables', label: 'Vegetables' },
-  { value: 'fruits', label: 'Fruits' },
-  { value: 'grains', label: 'Grains' },
-  { value: 'spices', label: 'Spices' },
-  { value: 'dairy', label: 'Dairy' },
-]
+const DEFAULT_CATEGORY = 'vegetables'
+const getFirstProduct = (category) => PRODUCT_OPTIONS[category]?.[0] || ''
 
 const UNITS = [
   { value: 'kg', label: 'KG' },
@@ -18,9 +14,9 @@ const UNITS = [
 
 export default function EditProductModal({ isOpen, onClose, onSubmit, loading, product }) {
   const [formData, setFormData] = useState({
-    name: '',
+    name: getFirstProduct(DEFAULT_CATEGORY),
     description: '',
-    category: 'vegetables',
+    category: DEFAULT_CATEGORY,
     base_price: '',
     quantity_available: '',
     unit: 'kg',
@@ -30,10 +26,13 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
 
   useEffect(() => {
     if (product && isOpen) {
+      const nextCategory = product.category || DEFAULT_CATEGORY
+      const options = PRODUCT_OPTIONS[nextCategory] || []
+      const nextName = options.includes(product.name) ? product.name : (product.name || getFirstProduct(nextCategory))
       setFormData({
-        name: product.name || '',
+        name: nextName,
         description: product.description || '',
-        category: product.category || 'vegetables',
+        category: nextCategory,
         base_price: product.base_price || '',
         quantity_available: product.quantity_available || '',
         unit: product.unit || 'kg',
@@ -44,7 +43,16 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      if (name === 'category') {
+        return {
+          ...prev,
+          category: value,
+          name: getFirstProduct(value),
+        }
+      }
+      return { ...prev, [name]: value }
+    })
     setError('')
   }
 
@@ -73,6 +81,9 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
 
   if (!isOpen) return null
 
+  const nameOptions = PRODUCT_OPTIONS[formData.category] || []
+  const showCurrentValueOption = Boolean(formData.name) && !nameOptions.includes(formData.name)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -92,14 +103,21 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-text mb-2">Product Name</label>
-              <input
-                type="text"
+              <select
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="e.g., Organic Tomatoes"
-                className="w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text transition-colors focus:border-accent focus:outline-none"
-              />
+                className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text transition-colors focus:border-accent focus:outline-none"
+              >
+                {showCurrentValueOption && (
+                  <option value={formData.name}>{formData.name}</option>
+                )}
+                {nameOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-2">Category</label>

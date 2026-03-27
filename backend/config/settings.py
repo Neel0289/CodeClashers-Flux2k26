@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -145,9 +146,21 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
 ]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Razorpay demo credentials (override with env vars in deployment)
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_SUf8lFvYZDcVDt')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '0RuyqfL9UiKEcVq7MpRACmDc')
+
+# Firebase Admin service-account JSON path for backend token verification.
+FIREBASE_ADMIN_CREDENTIAL_PATH = os.environ.get(
+    'FIREBASE_ADMIN_CREDENTIAL_PATH',
+    str(BASE_DIR.parent / 'fluxfirebase.json'),
+)

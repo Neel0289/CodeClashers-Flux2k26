@@ -6,6 +6,16 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.users.models import BuyerProfile, FarmerProfile, LogisticsProfile, User
 
 
+def build_unique_username(email: str) -> str:
+    base_username = email.split('@')[0]
+    username = base_username
+    count = 1
+    while User.objects.filter(username=username).exists():
+        username = f"{base_username}{count}"
+        count += 1
+    return username
+
+
 class RegisterSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=User.ROLE_CHOICES)
     name = serializers.CharField(max_length=150)
@@ -23,6 +33,8 @@ class RegisterSerializer(serializers.Serializer):
     business_type = serializers.ChoiceField(choices=[('restaurant', 'Restaurant'), ('store', 'Store')], required=False)
     state = serializers.CharField(required=False)
     city = serializers.CharField(required=False)
+    buyer_latitude = serializers.FloatField(required=False)
+    buyer_longitude = serializers.FloatField(required=False)
 
     vehicle_type = serializers.ChoiceField(choices=[('bike', 'Bike'), ('tempo', 'Tempo'), ('truck', 'Truck')], required=False)
     max_weight_capacity = serializers.FloatField(required=False)
@@ -36,7 +48,7 @@ class RegisterSerializer(serializers.Serializer):
         role = attrs['role']
         required_map = {
             'farmer': ['farm_name', 'farm_state', 'farm_city', 'farm_latitude', 'farm_longitude'],
-            'buyer': ['business_name', 'business_type', 'state', 'city'],
+            'buyer': ['business_name', 'business_type', 'state', 'city', 'buyer_latitude', 'buyer_longitude'],
             'logistics': ['vehicle_type', 'max_weight_capacity', 'operating_states'],
         }
         for field in required_map.get(role, []):
@@ -46,22 +58,19 @@ class RegisterSerializer(serializers.Serializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        base_username = validated_data['email'].split('@')[0]
-        username = base_username
-        count = 1
-        while User.objects.filter(username=username).exists():
-            username = f"{base_username}{count}"
-            count += 1
+        password = validated_data.pop('password')
 
-        user = User.objects.create_user(
-            username=username,
+        user = User.objects.create(
+            username=build_unique_username(validated_data['email']),
             first_name=validated_data['name'],
             email=validated_data['email'],
             phone=validated_data['phone'],
             role=validated_data['role'],
             profile_complete=True,
-            password=validated_data['password'],
         )
+
+        user.set_password(password)
+        user.save(update_fields=['password'])
 
         if user.role == 'farmer':
             FarmerProfile.objects.create(
@@ -79,6 +88,8 @@ class RegisterSerializer(serializers.Serializer):
                 business_type=validated_data['business_type'],
                 state=validated_data['state'],
                 city=validated_data['city'],
+                latitude=validated_data['buyer_latitude'],
+                longitude=validated_data['buyer_longitude'],
             )
         elif user.role == 'logistics':
             LogisticsProfile.objects.create(
@@ -124,7 +135,7 @@ class FarmerProfileSerializer(serializers.ModelSerializer):
 class BuyerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyerProfile
-        fields = ['business_name', 'business_type', 'state', 'city']
+        fields = ['business_name', 'business_type', 'state', 'city', 'latitude', 'longitude']
 
 
 class LogisticsProfileSerializer(serializers.ModelSerializer):
