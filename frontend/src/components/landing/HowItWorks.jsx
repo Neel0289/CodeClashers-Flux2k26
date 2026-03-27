@@ -8,7 +8,7 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <section className="mx-auto max-w-5xl px-6 py-16">
+    <section id="how-it-works" className="mx-auto max-w-5xl px-6 py-16">
       <h2 className="mb-10 text-center font-display text-4xl">Simple for everyone</h2>
       <svg className="mb-8 h-8 w-full" viewBox="0 0 100 8">
         <motion.path

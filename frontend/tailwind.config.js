@@ -12,7 +12,7 @@ export default {
         'text-muted': '#60727A',
         accent: '#2E7D32',
         'accent-bright': '#2E7D32',
-        'accent-dark': '#1B5E20',
+        'accent-dark': '#2E7D32',
         brown: '#6D544C',
         'brown-light': '#8D736A',
         'brown-surface': '#FFFFFF',
