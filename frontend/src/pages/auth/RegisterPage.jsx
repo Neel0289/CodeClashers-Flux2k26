@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { register } from '../../api/auth'
@@ -16,25 +16,39 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [role, setRole] = useState('farmer')
-
-  const fields = useMemo(() => {
-    if (role === 'farmer') return ['farm_name', 'farm_state', 'farm_city']
-    if (role === 'buyer') return ['business_name', 'business_type', 'state', 'city']
-    return ['vehicle_type', 'max_weight_capacity', 'operating_states']
-  }, [role])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   const submit = async (event) => {
     event.preventDefault()
+    setError('')
+    setSubmitting(true)
     const formData = new FormData(event.currentTarget)
     const payload = Object.fromEntries(formData.entries())
     payload.role = role
     if (payload.operating_states) {
       payload.operating_states = payload.operating_states.split(',').map((s) => s.trim()).filter(Boolean)
     }
-    const { data } = await register(payload)
-    localStorage.setItem('access', data.access)
-    localStorage.setItem('refresh', data.refresh)
-    navigate(`/${role}/dashboard`)
+    try {
+      const { data } = await register(payload)
+      localStorage.setItem('access', data.access)
+      localStorage.setItem('refresh', data.refresh)
+      navigate(`/${role}/dashboard`)
+    } catch (err) {
+      const details = err?.response?.data
+      if (!err?.response) {
+        setError('Cannot reach backend API. Start Django server at 127.0.0.1:8000 and try again.')
+      } else if (typeof details === 'string') {
+        setError(details)
+      } else if (details?.detail) {
+        setError(details.detail)
+      } else {
+        const first = details && typeof details === 'object' ? Object.values(details)[0] : null
+        setError(Array.isArray(first) ? first[0] : first || 'Registration failed. Please check your details.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -48,7 +62,7 @@ export default function RegisterPage() {
                 {label}
               </button>
             ))}
-            <Button className="md:col-span-3 bg-accent-bright text-bg" onClick={() => setStep(2)}>Continue</Button>
+            <Button className="md:col-span-3" onClick={() => setStep(2)}>Continue</Button>
           </motion.div>
         ) : (
           <motion.form key="form" initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -24, opacity: 0 }} onSubmit={submit} className="grid gap-3 rounded-2xl border border-border bg-surface p-5">
@@ -56,10 +70,41 @@ export default function RegisterPage() {
             <Input name="email" type="email" placeholder="Email" required />
             <Input name="phone" placeholder="Phone" required />
             <Input name="password" type="password" placeholder="Password" required />
-            {fields.map((field) => <Input key={field} name={field} placeholder={field.replaceAll('_', ' ')} required />)}
+            {role === 'farmer' && (
+              <>
+                <Input name="farm_name" placeholder="Farm name" required />
+                <Input name="farm_state" placeholder="Farm state" required />
+                <Input name="farm_city" placeholder="Farm city" required />
+              </>
+            )}
+            {role === 'buyer' && (
+              <>
+                <Input name="business_name" placeholder="Business name" required />
+                <select name="business_type" className="focus-ring w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text-primary shadow-sm" required>
+                  <option value="">Select business type</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="store">Store</option>
+                </select>
+                <Input name="state" placeholder="State" required />
+                <Input name="city" placeholder="City" required />
+              </>
+            )}
+            {role === 'logistics' && (
+              <>
+                <select name="vehicle_type" className="focus-ring w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text-primary shadow-sm" required>
+                  <option value="">Select vehicle type</option>
+                  <option value="bike">Bike</option>
+                  <option value="tempo">Tempo</option>
+                  <option value="truck">Truck</option>
+                </select>
+                <Input name="max_weight_capacity" type="number" min="1" step="1" placeholder="Max weight capacity (kg)" required />
+                <Input name="operating_states" placeholder="Operating states (comma separated)" required />
+              </>
+            )}
+            {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-3">
-              <Button type="button" className="bg-surface-2" onClick={() => setStep(1)}>Back</Button>
-              <Button type="submit" className="bg-accent-bright text-bg">Register</Button>
+              <Button type="button" className="bg-surface-2 text-text-primary hover:bg-surface-2" onClick={() => setStep(1)}>Back</Button>
+              <Button type="submit" disabled={submitting} className={submitting ? 'opacity-70' : ''}>{submitting ? 'Registering...' : 'Register'}</Button>
             </div>
           </motion.form>
         )}

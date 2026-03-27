@@ -15,6 +15,7 @@ export default function LoginPage() {
     try {
       const formData = new FormData(event.currentTarget)
       const payload = Object.fromEntries(formData.entries())
+      payload.email = String(payload.email || '').trim().toLowerCase()
       const { data } = await login(payload)
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)

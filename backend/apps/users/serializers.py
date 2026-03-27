@@ -27,6 +27,10 @@ class RegisterSerializer(serializers.Serializer):
     operating_states = serializers.ListField(child=serializers.CharField(), required=False)
 
     def validate(self, attrs):
+        attrs['email'] = attrs['email'].strip().lower()
+        if User.objects.filter(email__iexact=attrs['email']).exists():
+            raise serializers.ValidationError({'email': 'An account with this email already exists.'})
+
         role = attrs['role']
         required_map = {
             'farmer': ['farm_name', 'farm_state', 'farm_city'],
@@ -93,9 +97,9 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs['email']
+        email = attrs['email'].strip().lower()
         password = attrs['password']
-        user = User.objects.filter(email=email).first()
+        user = User.objects.filter(email__iexact=email).first()
         if not user:
             raise serializers.ValidationError('Invalid credentials.')
 
