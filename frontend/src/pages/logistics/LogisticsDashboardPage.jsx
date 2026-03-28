@@ -450,263 +450,457 @@ export default function LogisticsDashboardPage() {
   }
 
   return (
-    <PageShell
-      title="Logistics Dashboard"
-      actions={<Button onClick={handleLogout}>Logout</Button>}
-    >
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <p className="mb-4 text-lg font-semibold">Logistics Profile</p>
-          <div className="space-y-2 text-sm text-text-primary">
-            <p><span className="font-medium">Name:</span> {user?.first_name || '-'}</p>
-            <div className="space-y-2">
-              <p><span className="font-medium">Vehicles:</span></p>
-              <div className="space-y-2">
-                {profileVehicles.map((vehicle, index) => {
-                  const states = Array.isArray(vehicle?.operating_states) ? vehicle.operating_states : []
-                  const capacity = vehicle?.max_weight_capacity ?? vehicle?.max_weight_kg ?? 0
-                  return (
-                    <div key={`vehicle-${index}`} className="rounded-[10px] border border-border bg-surface-2 px-3 py-2">
-                      <p><span className="font-medium">#{index + 1}</span> {formatStatus(vehicle?.vehicle_type || '-')}</p>
-                      {vehicle?.vehicle_number ? (
-                        <p><span className="font-medium">Vehicle Number:</span> {vehicle.vehicle_number}</p>
-                      ) : null}
-                      <p><span className="font-medium">Max Weight Capacity:</span> {capacity} kg</p>
-                      <p><span className="font-medium">Operating States:</span> {states.length ? states.join(', ') : '-'}</p>
-                    </div>
-                  )
-                })}
+    <div className="min-h-screen farm-bg pb-12">
+      <PageShell
+        title={
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">🚚</span>
+            <span>Logistics Dashboard</span>
+          </div>
+        }
+        actions={<Button onClick={handleLogout}>Logout</Button>}
+      >
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card variant="clay">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-emerald-100 p-2 rounded-xl text-emerald-700">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
               </div>
+              <h2 className="text-xl font-bold text-text-primary">Logistics Profile</h2>
             </div>
-          </div>
-        </Card>
-
-        <Card>
-          <p className="mb-4 text-lg font-semibold">Performance</p>
-          <div className="space-y-2 text-sm text-text-primary">
-            <p><span className="font-medium">Rating:</span> {Number(profile.rating || 0).toFixed(1)}</p>
-            <p><span className="font-medium">Total Deliveries:</span> {profile.total_deliveries || 0}</p>
-            <p><span className="font-medium">Account Email:</span> {user?.email || '-'}</p>
-            <p><span className="font-medium">Phone:</span> {user?.phone || '-'}</p>
-          </div>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <p className="mb-4 text-lg font-semibold">Analytics</p>
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-3 py-2">
-              <p className="text-xs uppercase tracking-wider text-emerald-700">Total Revenue</p>
-              <p className="text-lg font-bold text-emerald-900">{formatInr(totalRevenue)}</p>
-            </div>
-            <div className="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white px-3 py-2">
-              <p className="text-xs uppercase tracking-wider text-sky-700">Incoming Requests</p>
-              <p className="text-lg font-bold text-sky-900">{totalRequestCount}</p>
-            </div>
-            <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-3 py-2">
-              <p className="text-xs uppercase tracking-wider text-violet-700">Top Destination</p>
-              <p className="text-base font-bold text-violet-900">{topDestination}</p>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-[12px] border border-border bg-gradient-to-b from-white to-slate-50 p-4 shadow-sm">
-              <p className="text-sm font-medium text-text-primary">Total Revenue by Request Status</p>
-              <p className="text-xs text-text-muted">Status-wise quoted fee breakdown</p>
-              <div className="mt-3 h-64">
-                {revenueChartData.labels.length > 0 ? (
-                  <Bar
-                    data={revenueChartData}
-                    options={revenueChartOptions}
-                  />
-                ) : (
-                  <p className="text-sm text-text-muted">No revenue data available yet.</p>
-                )}
+            <div className="space-y-3 text-sm text-text-primary">
+              <div className="flex justify-between items-center border-b border-border pb-2">
+                <span className="text-text-muted">Name</span>
+                <span className="font-semibold">{user?.first_name || '-'}</span>
               </div>
-            </div>
-
-            <div className="rounded-[12px] border border-border bg-gradient-to-b from-white to-slate-50 p-4 shadow-sm">
-              <p className="text-sm font-medium text-text-primary">Places With Most Orders</p>
-              <p className="text-xs text-text-muted">Based on unique order destinations</p>
-              <div className="mt-3 h-64">
-                {placesChartData.labels.length > 0 ? (
-                  <Doughnut
-                    data={placesChartData}
-                    options={placesChartOptions}
-                  />
-                ) : (
-                  <p className="text-sm text-text-muted">No destination data available yet.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <p className="mb-4 text-lg font-semibold">Incoming Logistics Requests</p>
-          {requestError && <p className="mb-2 text-sm text-red-600">{requestError}</p>}
-          {requestMessage && <p className="mb-2 text-sm text-green-700">{requestMessage}</p>}
-          {requestsLoading && <p className="text-sm text-text-muted">Loading requests...</p>}
-          {!requestsLoading && requests.length === 0 && (
-            <p className="text-sm text-text-muted">No requests available right now.</p>
-          )}
-          {!requestsLoading && requests.length > 0 && (
-            <div className="space-y-3">
-              {requests.slice(0, 10).map((request) => (
-                <div
-                  key={request.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleSelectRequest(request)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      handleSelectRequest(request)
-                    }
-                  }}
-                  className={`w-full rounded-[12px] border px-3 py-2 text-left transition-colors ${Number(selectedRequestId) === Number(request.id) ? 'border-emerald-600 bg-emerald-50' : 'border-border hover:border-emerald-300'}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="text-sm text-text-primary">
-                      <p className="font-medium">Farmer: {request.farmer_name || '-'}</p>
-                      <p className="text-xs text-text-muted">Phone: {request.farmer_phone || '-'}</p>
-                      <p className="text-xs text-text-muted">Order: #{request.order} | Product: {request.product_name || '-'}</p>
-                      <p className="text-xs text-text-muted">Qty: {request.order_quantity || request.weight_kg} kg | Value: ₹{request.order_agreed_price || '-'}</p>
-                      <p className="text-xs text-text-muted">
-                        Route: {request.pickup_city}, {request.pickup_state} {'->'} {request.drop_city}, {request.drop_state}
-                      </p>
-                      <p className="text-xs text-text-muted">Request Type: {formatStatus(request.status)}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <StatusBadge status={request.status} />
-                      <Button
-                        type="button"
-                        onClick={() => handleGenerateLogisticsInvoice(request)}
-                        className="bg-accent px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
-                      >
-                        Invoice
-                      </Button>
-                      {request.status === 'pending' && (
-                        <Button
-                          type="button"
-                          disabled={requestActionLoadingId === request.id}
-                          onClick={() => openQuoteModal(request)}
-                          className="bg-emerald-700 hover:bg-emerald-800"
-                        >
-                          {requestActionLoadingId === request.id ? 'Sending...' : 'Send Price Quote'}
-                        </Button>
-                      )}
-                      {request.status === 'quoted' && (
-                        <div className="text-right">
-                          <p className="text-xs font-medium text-amber-700">Quoted: ₹{request.quoted_fee || '-'}</p>
-                          <p className="text-xs font-medium text-blue-700">Farmer Decision Pending</p>
+              <div className="space-y-3 pt-2">
+                <p className="font-semibold text-text-muted uppercase text-xs tracking-wider">Managed Vehicles</p>
+                <div className="space-y-3">
+                  {profileVehicles.map((vehicle, index) => {
+                    const states = Array.isArray(vehicle?.operating_states) ? vehicle.operating_states : []
+                    const capacity = vehicle?.max_weight_capacity ?? vehicle?.max_weight_kg ?? 0
+                    return (
+                      <div key={`vehicle-${index}`} className="clay-input rounded-2xl p-4 bg-white/50 border border-emerald-50">
+                        <div className="flex justify-between mb-2">
+                          <span className="bg-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">Vehicle #{index + 1}</span>
+                          <span className="font-bold text-emerald-700">{formatStatus(vehicle?.vehicle_type || '-')}</span>
                         </div>
-                      )}
+                        {vehicle?.vehicle_number && (
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-text-muted">Number:</span>
+                            <span className="font-medium">{vehicle.vehicle_number}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-text-muted">Capacity:</span>
+                          <span className="font-medium text-emerald-600">{capacity} kg</span>
+                        </div>
+                        <div className="text-xs">
+                          <span className="text-text-muted block mb-1">Operating States:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {states.length ? states.map((s) => (
+                              <span key={s} className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md text-[10px] font-medium border border-emerald-200">{s}</span>
+                            )) : <span className="text-text-muted italic">-</span>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </Card>
+  
+          <Card variant="clay">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-sky-100 p-2 rounded-xl text-sky-700">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-text-primary">Performance Summary</h2>
+            </div>
+            <div className="space-y-4 text-sm text-text-primary">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="clay-input rounded-2xl p-4 text-center">
+                  <p className="text-xs text-text-muted uppercase font-bold tracking-tight mb-1">Rating</p>
+                  <p className="text-3xl font-black text-sky-700">{Number(profile.rating || 0).toFixed(1)} <span className="text-sm font-normal text-text-muted">/ 5.0</span></p>
+                </div>
+                <div className="clay-input rounded-2xl p-4 text-center">
+                  <p className="text-xs text-text-muted uppercase font-bold tracking-tight mb-1">Deliveries</p>
+                  <p className="text-3xl font-black text-emerald-700">{profile.total_deliveries || 0}</p>
+                </div>
+              </div>
+              <div className="space-y-3 pt-2">
+                <div className="flex justify-between items-center border-b border-border pb-2">
+                  <span className="text-text-muted">Email</span>
+                  <span className="font-medium truncate max-w-[180px]">{user?.email || '-'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-text-muted">Phone</span>
+                  <span className="font-medium">{user?.phone || '-'}</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+  
+          <Card variant="clay" className="md:col-span-2">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="bg-amber-100 p-2 rounded-xl text-amber-700">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-text-primary">Analytics Insights</h2>
+            </div>
+  
+            <div className="mb-8 grid gap-4 md:grid-cols-3">
+              <div className="clay-card bg-emerald-600 p-5 text-white rounded-[24px]">
+                <p className="text-[10px] uppercase font-black tracking-widest opacity-80 mb-1">Total Revenue</p>
+                <p className="text-3xl font-black tracking-tighter">{formatInr(totalRevenue)}</p>
+              </div>
+              <div className="clay-card bg-sky-600 p-5 text-white rounded-[24px]">
+                <p className="text-[10px] uppercase font-black tracking-widest opacity-80 mb-1">Incoming Requests</p>
+                <p className="text-3xl font-black tracking-tighter">{totalRequestCount}</p>
+              </div>
+              <div className="clay-card bg-violet-600 p-5 text-white rounded-[24px]">
+                <p className="text-[10px] uppercase font-black tracking-widest opacity-80 mb-1">Top Destination</p>
+                <p className="text-xl font-black tracking-tight truncate">{topDestination}</p>
+              </div>
+            </div>
+  
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="clay-input rounded-[28px] p-6 bg-white/40 border border-white/60">
+                <h3 className="text-sm font-bold text-text-primary mb-1 uppercase tracking-tight">Revenue Breakdown</h3>
+                <p className="text-[10px] text-text-muted mb-4 uppercase font-medium">Status-wise quoted fee distribution</p>
+                <div className="h-64">
+                  {revenueChartData.labels.length > 0 ? (
+                    <Bar data={revenueChartData} options={revenueChartOptions} />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-text-muted italic text-sm">No revenue data available.</div>
+                  )}
+                </div>
+              </div>
+  
+              <div className="clay-input rounded-[28px] p-6 bg-white/40 border border-white/60">
+                <h3 className="text-sm font-bold text-text-primary mb-1 uppercase tracking-tight">Top Routes</h3>
+                <p className="text-[10px] text-text-muted mb-4 uppercase font-medium">Frequent destination cities</p>
+                <div className="h-64">
+                  {placesChartData.labels.length > 0 ? (
+                    <Doughnut data={placesChartData} options={placesChartOptions} />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-text-muted italic text-sm">No destination data available.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card variant="clay" className="md:col-span-2">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-orange-100 p-2 rounded-xl text-orange-700">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-text-primary">Incoming Logistics Requests</h2>
+            </div>
+            
+            {requestError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">{requestError}</div>}
+            {requestMessage && <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm font-medium">{requestMessage}</div>}
+            
+            {requestsLoading && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-2"></div>
+                <p className="text-sm text-text-muted">Loading requests...</p>
+              </div>
+            )}
+            
+            {!requestsLoading && requests.length === 0 && (
+              <div className="text-center py-12 clay-input rounded-3xl bg-white/30 border-dashed border-2 border-border">
+                <p className="text-text-muted italic">No requests available right now.</p>
+              </div>
+            )}
+            
+            {!requestsLoading && requests.length > 0 && (
+              <div className="grid gap-4">
+                {requests.slice(0, 10).map((request) => (
+                  <div
+                    key={request.id}
+                    onClick={() => handleSelectRequest(request)}
+                    className={`group relative overflow-hidden rounded-[24px] border transition-all duration-300 cursor-pointer ${
+                      Number(selectedRequestId) === Number(request.id) 
+                        ? 'border-emerald-500 shadow-lg ring-1 ring-emerald-500 bg-emerald-50/50' 
+                        : 'border-border bg-white hover:border-emerald-300 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="p-5">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 rounded-2xl ${Number(selectedRequestId) === Number(request.id) ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-emerald-100 group-hover:text-emerald-600'} transition-colors`}>
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="font-black text-text-primary text-lg">Order #{request.order}</h3>
+                            <p className="text-xs text-text-muted font-bold uppercase tracking-widest">{request.product_name || 'Agri Product'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={request.status} />
+                          <Button
+                            variant="clay"
+                            onClick={(e) => { e.stopPropagation(); handleGenerateLogisticsInvoice(request); }}
+                            className="text-[10px] py-1.5 px-3 uppercase font-black"
+                          >
+                            Invoice
+                          </Button>
+                        </div>
+                      </div>
+  
+                      <div className="clay-input rounded-2xl bg-white/60 p-4 border border-emerald-50 mb-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                          <div className="border-r border-emerald-100">
+                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Quantity</p>
+                            <p className="font-bold text-text-primary">{request.order_quantity || request.weight_kg} kg</p>
+                          </div>
+                          <div className="md:border-r border-emerald-100">
+                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Value</p>
+                            <p className="font-bold text-emerald-700">₹{request.order_agreed_price || '-'}</p>
+                          </div>
+                          <div className="border-r border-emerald-100">
+                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Farmer</p>
+                            <p className="font-bold text-text-primary truncate px-2">{request.farmer_name || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Contact</p>
+                            <p className="font-bold text-text-primary text-xs">{request.farmer_phone || '-'}</p>
+                          </div>
+                        </div>
+                      </div>
+  
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full text-slate-700 font-medium">
+                            <span className="text-lg">📍</span> {request.pickup_city}
+                          </div>
+                          <span className="text-text-muted">→</span>
+                          <div className="flex items-center gap-1.5 bg-emerald-100 px-3 py-1.5 rounded-full text-emerald-800 font-medium">
+                            <span className="text-lg">🎯</span> {request.drop_city}
+                          </div>
+                        </div>
+  
+                        {request.status === 'pending' && (
+                          <Button
+                            variant="clay"
+                            disabled={requestActionLoadingId === request.id}
+                            onClick={(e) => { e.stopPropagation(); openQuoteModal(request); }}
+                            className="bg-emerald-700 text-white font-bold"
+                          >
+                            {requestActionLoadingId === request.id ? 'Sending...' : 'Send Price Quote'}
+                          </Button>
+                        )}
+                        {request.status === 'quoted' && (
+                          <div className="flex items-center gap-3 bg-amber-50 px-4 py-2 rounded-2xl border border-amber-100">
+                            <div className="text-right">
+                              <p className="text-[10px] text-amber-600 uppercase font-black tracking-widest">Our Quote</p>
+                              <p className="font-black text-amber-700">₹{request.quoted_fee || '-'}</p>
+                            </div>
+                            <div className="h-8 w-[1px] bg-amber-200"></div>
+                            <p className="text-xs font-bold text-amber-600 animate-pulse">Decision Pending</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+  
+          <Card variant="clay" className="md:col-span-2 overflow-hidden border-none">
+            <div className="bg-gradient-to-r from-sky-600 to-emerald-600 p-6 -mx-8 -mt-8 mb-8">
+              <div className="flex items-center gap-4 text-white">
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md shadow-inner">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A2 2 0 013 15.485V6.447a2 2 0 011.106-1.789l5.447-2.724a2 2 0 011.894 0l5.447 2.724A2 2 0 0118 6.447v9.038a2 2 0 01-1.106 1.789l-5.447 2.724a2 2 0 01-1.894 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v18m0-18l9 6m-9 6l9 6" /></svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">Interactive Route Planner</h2>
+                  <p className="text-white/80 text-xs font-bold uppercase tracking-widest">Optimize your transport logistics</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid gap-6">
+              <div className="clay-input rounded-3xl p-5 bg-sky-50/50 border border-sky-100/50 backdrop-blur-sm shadow-sm ring-1 ring-sky-200/30">
+                <p className="text-xs text-sky-700 font-black uppercase tracking-widest mb-1 flex items-center gap-2">
+                  <span className="flex h-2 w-2 rounded-full bg-sky-500 animate-pulse"></span>
+                  Dynamic Route Mapping
+                </p>
+                <p className="text-[11px] text-sky-600/80 font-medium">Route auto-fills from selected requests. Click anywhere on the map to set custom waypoints.</p>
+                {mapAddressLoading && <div className="mt-2 flex items-center gap-2 text-xs text-sky-600 font-bold"><div className="animate-spin h-3 w-3 border-b-2 border-sky-600 rounded-full"></div> Resolving location coordinates...</div>}
+              </div>
+  
+              <div className="relative group">
+                <div className="absolute -inset-1 bg-gradient-to-r from-sky-400 to-emerald-400 rounded-[40px] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                <div className="relative h-[420px] overflow-hidden rounded-[36px] bg-white border-8 border-white shadow-2xl">
+                  <MapContainer
+                    key={`${routeDraft.start?.lat || 's0'}-${routeDraft.end?.lat || 'e0'}`}
+                    center={routeDraft.start ? [routeDraft.start.lat, routeDraft.start.lon] : INDIA_CENTER}
+                    zoom={routeDraft.start ? 7 : 5}
+                    scrollWheelZoom
+                    className="h-full w-full z-0"
+                  >
+                    <TileLayer
+                      attribution='&copy; OpenStreetMap contributors'
+                      url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                    />
+                    <RouteMapPicker onPick={handleMapPick} />
+                    {routeDraft.start && (
+                      <CircleMarker
+                        center={[routeDraft.start.lat, routeDraft.start.lon]}
+                        radius={12}
+                        pathOptions={{ color: '#2563eb', fillColor: '#fff', fillOpacity: 1, weight: 6 }}
+                      />
+                    )}
+                    {routeDraft.end && (
+                      <CircleMarker
+                        center={[routeDraft.end.lat, routeDraft.end.lon]}
+                        radius={12}
+                        pathOptions={{ color: '#059669', fillColor: '#fff', fillOpacity: 1, weight: 6 }}
+                      />
+                    )}
+                    {routeDraft.start && routeDraft.end && (
+                      <Polyline
+                        positions={[
+                          [routeDraft.start.lat, routeDraft.start.lon],
+                          [routeDraft.end.lat, routeDraft.end.lon],
+                        ]}
+                        pathOptions={{ color: '#0f766e', weight: 8, dashArray: '1, 15', lineCap: 'round', opacity: 0.8 }}
+                      />
+                    )}
+                  </MapContainer>
+                  
+                  {/* Floating Route Info Overlay */}
+                  <div className="absolute right-6 bottom-6 flex flex-col gap-3 z-[1000]">
+                    <div className="clay-card bg-white/95 backdrop-blur-xl p-4 shadow-2xl border border-white/50 w-64 transform transition-all hover:scale-105">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="bg-emerald-100 p-2 rounded-xl text-emerald-700">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </div>
+                        <p className="text-[10px] font-black uppercase text-text-muted tracking-widest">Logistics Metrics</p>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-end border-b border-slate-100 pb-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Distance</span>
+                          <span className="text-xl font-black text-emerald-600">{routeDistanceKm ? `${routeDistanceKm.toFixed(1)} KM` : '--'}</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Est. Fuel</span>
+                          <span className="text-lg font-black text-slate-700">{routeDistanceKm ? `~${(routeDistanceKm / 15).toFixed(1)} L` : '--'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))}
+              </div>
+  
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="clay-input rounded-[28px] p-6 bg-gradient-to-br from-white to-slate-50 border border-slate-200/50 shadow-sm transition-all hover:shadow-md">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-sky-50 p-2 rounded-xl text-sky-600 border border-sky-100">
+                      <span className="text-xl">📍</span>
+                    </div>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Departure</p>
+                  </div>
+                  <p className="text-xl font-black text-slate-800 leading-tight">
+                    {routeDraft.start ? `${routeDraft.start.city || '-'}, ${routeDraft.start.state || '-'}` : 'Selecting on map...'}
+                  </p>
+                </div>
+                <div className="clay-input rounded-[28px] p-6 bg-gradient-to-br from-white to-sky-50/30 border border-emerald-100 shadow-sm transition-all hover:shadow-md">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-emerald-50 p-2 rounded-xl text-emerald-600 border border-emerald-100">
+                      <span className="text-xl">🎯</span>
+                    </div>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Destination</p>
+                  </div>
+                  <p className="text-xl font-black text-emerald-700 leading-tight">
+                    {routeDraft.end ? `${routeDraft.end.city || '-'}, ${routeDraft.end.state || '-'}` : 'Selecting on map...'}
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
-        </Card>
-
-        <Card className="md:col-span-2">
-          <p className="mb-4 text-lg font-semibold">Add Route</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs text-text-muted">
-              Pickup/drop are auto-filled from the selected request route. Click any request above to change map route.{mapAddressLoading ? ' Resolving address...' : ''}
-            </p>
-          </div>
-
-          <div className="mt-3 h-72 overflow-hidden rounded-[12px] border border-border">
-            <MapContainer
-              key={`${routeDraft.start?.lat || 's0'}-${routeDraft.end?.lat || 'e0'}`}
-              center={routeDraft.start ? [routeDraft.start.lat, routeDraft.start.lon] : INDIA_CENTER}
-              zoom={routeDraft.start ? 7 : 5}
-              scrollWheelZoom
-              className="h-full w-full"
-            >
-              <TileLayer
-                attribution='&copy; OpenStreetMap contributors'
-                url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-              />
-              <RouteMapPicker onPick={handleMapPick} />
-              {routeDraft.start && (
-                <CircleMarker
-                  center={[routeDraft.start.lat, routeDraft.start.lon]}
-                  radius={8}
-                  pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.85 }}
-                />
-              )}
-              {routeDraft.end && (
-                <CircleMarker
-                  center={[routeDraft.end.lat, routeDraft.end.lon]}
-                  radius={8}
-                  pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.85 }}
-                />
-              )}
-              {routeDraft.start && routeDraft.end && (
-                <Polyline
-                  positions={[
-                    [routeDraft.start.lat, routeDraft.start.lon],
-                    [routeDraft.end.lat, routeDraft.end.lon],
-                  ]}
-                  pathOptions={{ color: '#0f766e', weight: 4 }}
-                />
-              )}
-            </MapContainer>
-          </div>
-
-          <div className="mt-3 grid gap-2 md:grid-cols-2 text-sm text-text-primary">
-            <div>
-              <p className="font-medium">Starting Point</p>
-              <p>{routeDraft.start ? `${routeDraft.start.city || '-'}, ${routeDraft.start.state || '-'}` : 'Not selected'}</p>
-            </div>
-            <div>
-              <p className="font-medium">Ending Point</p>
-              <p>{routeDraft.end ? `${routeDraft.end.city || '-'}, ${routeDraft.end.state || '-'}` : 'Not selected'}</p>
-            </div>
-          </div>
-
-          <div className="mt-2 text-sm text-text-primary">
-            <p className="font-medium">Approx Distance Between Places</p>
-            <p>{routeDistanceKm ? `~${routeDistanceKm.toFixed(1)} km` : 'Approx distance will appear once both points are selected.'}</p>
-          </div>
-
-          {routeError && <p className="mt-2 text-sm text-red-600">{routeError}</p>}
-          <p className="mt-3 text-xs text-text-muted">Start/end are selected automatically from map clicks for route preview.</p>
-        </Card>
-      </div>
-
-      {quoteModalRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
-          <div className="w-full max-w-md rounded-[14px] bg-white p-5 shadow-xl">
-            <p className="text-lg font-semibold text-text-primary">Send Logistics Price Quote</p>
-            <p className="mt-1 text-sm text-text-muted">
-              Order #{quoteModalRequest.order} | Route: {quoteModalRequest.pickup_city}, {quoteModalRequest.pickup_state} {'->'} {quoteModalRequest.drop_city}, {quoteModalRequest.drop_state}
-            </p>
-            <div className="mt-4">
-              <label className="mb-1 block text-sm font-medium text-text-primary">Price for logistics service (₹)</label>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={quoteValue}
-                onChange={(event) => setQuoteValue(event.target.value)}
-                className="w-full rounded-[10px] border border-border px-3 py-2 text-text-primary"
-                placeholder="Enter price"
-              />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Button type="button" onClick={closeQuoteModal} className="bg-gray-200 text-text-primary hover:bg-gray-300">
-                Cancel
-              </Button>
-              <Button type="button" onClick={handleSendQuote} disabled={requestActionLoadingId === quoteModalRequest.id}>
-                {requestActionLoadingId === quoteModalRequest.id ? 'Sending...' : 'Send Quote'}
-              </Button>
-            </div>
-          </div>
+  
+            {routeError && <div className="mt-8 p-4 bg-red-50 border-2 border-red-100 text-red-700 rounded-3xl text-sm font-bold flex items-center gap-3 animate-bounce">
+              <span className="text-xl text-red-500">⚠️</span> {routeError}
+            </div>}
+          </Card>
         </div>
-      )}
-    </PageShell>
+  
+        {quoteModalRequest && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-emerald-950/40 backdrop-blur-xl px-4 p-8">
+            <div className="clay-card w-full max-w-lg rounded-[48px] bg-white/90 backdrop-blur-2xl p-10 shadow-[0_32px_80px_-16px_rgba(16,185,129,0.3)] border border-white/80 animate-in fade-in zoom-in duration-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8">
+                <button onClick={closeQuoteModal} className="text-slate-300 hover:text-red-500 transition-colors">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-6 mb-10">
+                <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-5 rounded-[24px] text-white shadow-xl shadow-emerald-500/20">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black text-slate-800 tracking-tight">Financial Bid</h2>
+                  <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mt-1 italic">Order Reference: #{quoteModalRequest.order}</p>
+                </div>
+              </div>
+  
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="clay-input rounded-3xl p-5 bg-slate-50 border border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Logistics Route</p>
+                  <p className="text-sm font-black text-slate-700 truncate">{quoteModalRequest.pickup_city} → {quoteModalRequest.drop_city}</p>
+                </div>
+                <div className="clay-input rounded-3xl p-5 bg-emerald-50 border border-emerald-100">
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Payload Qty</p>
+                  <p className="text-sm font-black text-emerald-700">{quoteModalRequest.order_quantity || request.weight_kg} KG</p>
+                </div>
+              </div>
+  
+              <div className="mb-10 relative group">
+                <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-4">Proposed Quoted Fee</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                    <span className="text-4xl font-black text-emerald-600/30">₹</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={quoteValue}
+                    onChange={(event) => setQuoteValue(event.target.value)}
+                    className="clay-input w-full rounded-3xl border-none bg-emerald-50 p-8 pl-16 text-5xl font-black text-emerald-700 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-emerald-100 appearance-none"
+                    placeholder="000"
+                    autoFocus
+                  />
+                  <div className="absolute bottom-4 right-6 text-[10px] font-black text-emerald-600/50 uppercase">Per Shipment</div>
+                </div>
+              </div>
+  
+              <div className="flex gap-6">
+                <Button 
+                  variant="clay" 
+                  onClick={closeQuoteModal} 
+                  className="flex-1 bg-slate-100 text-slate-500 font-black py-5 rounded-[24px] active:scale-95 transition-transform"
+                >
+                  Discard Offer
+                </Button>
+                <Button 
+                  variant="clay" 
+                  onClick={handleSendQuote} 
+                  disabled={requestActionLoadingId === quoteModalRequest.id}
+                  className="flex-1 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white font-black py-5 rounded-[24px] shadow-xl shadow-emerald-500/30 active:scale-95 transition-transform"
+                >
+                  {requestActionLoadingId === quoteModalRequest.id ? 'Processing...' : 'Submit Quote'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </PageShell>
+    </div>
   )
 }

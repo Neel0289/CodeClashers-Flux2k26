@@ -765,21 +765,26 @@ export default function BuyerDashboardPage() {
   }
 
   return (
-    <>
+    <div className="min-h-screen farm-bg pb-12">
       <PageShell
-      title="Buyer Dashboard"
+        title={
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">🧺</span>
+            <span>Buyer Dashboard</span>
+          </div>
+        }
       actions={<Button onClick={handleLogout}>Logout</Button>}
     >
       <div className="grid gap-4 md:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.label} className="p-4">
-            <p className="text-sm text-text-muted">{stat.label}</p>
-            <p className="mt-2 text-3xl font-bold text-accent">{stat.value}</p>
+          <Card variant="clay" key={stat.label} className="p-6">
+            <p className="text-sm font-medium text-text-muted">{stat.label}</p>
+            <p className="mt-2 text-4xl font-extrabold text-accent">{stat.value}</p>
           </Card>
         ))}
       </div>
 
-      <Card className="mt-4 border-red-200 bg-red-50/60">
+      <Card variant="clay" className="mt-6 bg-red-50/30 border-none shadow-[12px_12px_24px_0_rgba(220,38,38,0.1),_inset_-8px_-8px_12px_0_rgba(220,38,38,0.05),_inset_8px_8px_12px_0_rgba(255,255,255,0.8)]">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-lg font-semibold text-red-700">Emergency Sell Fast Alerts</p>
           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
@@ -793,36 +798,41 @@ export default function BuyerDashboardPage() {
         {!alertsLoading && sellFastAlerts.length > 0 && (
           <div className="space-y-2">
             {sellFastAlerts.slice(0, 4).map((alert) => (
-              <div key={alert.id} className="rounded-[12px] border border-red-200 bg-white px-3 py-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">
-                      {alert.farmer_name} wants to sell {alert.product_name}
-                    </p>
-                    <p className="text-xs text-text-muted">
-                      {Number(alert.quantity_kg || 0).toFixed(1)} kg
-                      {alert.price_per_kg ? ` | ₹${alert.price_per_kg}/kg` : ''}
-                    </p>
-                    {alert.note ? <p className="mt-1 text-xs text-text-primary">{alert.note}</p> : null}
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => openSellFastBuyModal(alert)}
-                        disabled={!alert.product || Number(alert.quantity_kg || 0) <= 0}
-                        className="rounded-[8px] bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {!alert.product ? 'Direct buy unavailable' : 'Buy Now (No Bargaining)'}
-                      </button>
+              <div key={alert.id} className="clay-card !rounded-[32px] bg-white/70 backdrop-blur-sm p-5 shadow-sm border border-white/80 group">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                       <span className="text-xl group-hover:scale-125 transition-transform duration-500">🔥</span>
+                       <p className="text-sm font-black text-slate-800 tracking-tight leading-tight uppercase">
+                        {alert.product_name}
+                      </p>
                     </div>
+                    <div className="clay-input !rounded-[16px] px-3 py-2 bg-red-50/30 border-red-100/30 mb-3">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Source Partner</p>
+                       <p className="text-xs font-bold text-red-700 leading-none">{alert.farmer_name}</p>
+                    </div>
+                    
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Direct Price</p>
+                        <p className="text-lg font-black text-red-700 leading-none">₹{alert.price_per_kg}<span className="text-[10px] text-slate-400 font-sans">/kg</span></p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Available</p>
+                        <p className="text-sm font-black text-slate-700 leading-none">{Number(alert.quantity_kg || 0).toFixed(1)} kg</p>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={() => openSellFastBuyModal(alert)}
+                      disabled={!alert.product || Number(alert.quantity_kg || 0) <= 0}
+                      variant="clay"
+                      className="w-full !rounded-[16px] !py-2.5 !bg-gradient-to-br from-red-600 to-red-700 !text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+                    >
+                      {!alert.product ? 'Offline' : 'Buy Now'}
+                    </Button>
                   </div>
-                  <p className="text-[11px] text-text-muted">
-                    {new Date(alert.created_at).toLocaleString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
                 </div>
               </div>
             ))}
@@ -831,73 +841,124 @@ export default function BuyerDashboardPage() {
       </Card>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <Card>
-          <p className="mb-4 text-lg font-semibold">Recent Orders</p>
-          {loading && <p className="text-sm text-text-muted">Loading orders...</p>}
-          {!loading && recentOrders.length === 0 && <p className="text-sm text-text-muted">No orders yet.</p>}
+        <Card variant="clay">
+          <p className="mb-6 text-xl font-bold text-text-primary">Recent Orders</p>
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10">
+              <div className="coin-loader mb-4" />
+              <p className="text-sm font-medium text-text-muted">Fetching your orders...</p>
+            </div>
+          )}
+          {!loading && recentOrders.length === 0 && (
+            <Card variant="clay" className="bg-slate-50/50 p-8 text-center">
+              <p className="text-3xl mb-2">📦</p>
+              <p className="text-sm font-medium text-text-muted">No orders yet. Start exploring the catalog!</p>
+            </Card>
+          )}
           {!loading && recentOrders.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {recentOrders.map((order) => (
-                <div key={order.id} className="rounded-[12px] border border-border px-3 py-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">Farmer: {order.farmer_name || `Farmer #${order.farmer}`}</p>
-                      <p className="text-xs text-text-muted">Ordered: {order.product_name || `Order #${order.id}`}</p>
-                      <p className="text-xs text-text-muted">How much: {order.quantity} kg</p>
-                      <p className="text-xs text-text-muted">Negotiated price: ₹{order.agreed_price}</p>
-                      {order.status === 'confirmed' && (
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateInvoice(order)}
-                          className="mt-2 rounded-[8px] bg-accent px-2 py-1 text-xs font-semibold text-white hover:opacity-90"
-                        >
-                          Invoice
-                        </button>
-                      )}
-                      {order.buyer_review_submitted ? (
-                        <p className="mt-1 text-xs font-medium text-emerald-700">Farmer review submitted.</p>
-                      ) : order.buyer_can_review ? (
-                        <button
-                          type="button"
-                          onClick={() => openReviewModal(order, 'farmer')}
-                          className="mt-2 rounded-[8px] bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800"
-                        >
-                          Review Farmer
-                        </button>
-                      ) : (order.status === 'delivered' || order.status === 'completed') ? (
-                        <p className="mt-1 text-xs text-amber-700">Farmer review window closed (3 days after delivery).</p>
-                      ) : null}
-
-                      {(() => {
-                        const reviewableLogistics = getReviewableLogisticsForOrder(order.id)
-                        const deliveryDone = order.status === 'delivered' || order.status === 'completed'
-
-                        if (!reviewableLogistics) return null
-
-                        if (order.buyer_logistics_review_submitted) {
-                          return <p className="mt-1 text-xs font-medium text-blue-700">Logistics review submitted.</p>
-                        }
-
-                        if (order.buyer_can_review_logistics) {
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => openReviewModal(order, 'logistics', reviewableLogistics)}
-                              className="mt-2 rounded-[8px] bg-blue-700 px-2 py-1 text-xs text-white hover:bg-blue-800"
-                            >
-                              Review Logistics Partner
-                            </button>
-                          )
-                        }
-
-                        if (deliveryDone) {
-                          return <p className="mt-1 text-xs text-amber-700">Logistics review window closed (3 days after delivery).</p>
-                        }
-
-                        return null
-                      })()}
+                <div key={order.id} className="clay-card !rounded-[24px] bg-white/60 p-5 shadow-sm transition-all hover:bg-white">
+                  {/* Header with Farmer Info and Status Badge */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-xl shadow-inner">
+                        👤
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-text-primary leading-tight">
+                          {order.farmer_name || `Farmer #${order.farmer}`}
+                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Farmer</p>
+                      </div>
                     </div>
-                    <StatusBadge status={order.status} />
+                    <span className={`clay-card !rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      order.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                      order.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {order.status}
+                    </span>
+                  </div>
+
+                  {/* Order Details in a recessed well */}
+                  <div className="clay-input !rounded-[16px] mb-4 bg-slate-50/40 p-3 ring-0">
+                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/5">
+                      <p className="text-xs font-medium text-text-muted">Product</p>
+                      <p className="text-xs font-bold text-text-primary">{order.product_name || `Order #${order.id}`}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-text-muted">Quantity</p>
+                        <p className="text-sm font-black">{order.quantity} kg</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-text-muted">Total Price</p>
+                        <p className="text-sm font-black text-accent">₹{order.agreed_price}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {order.status === 'confirmed' && (
+                      <Button
+                        variant="clay"
+                        onClick={() => handleGenerateInvoice(order)}
+                        className="flex-1 py-2 text-xs font-bold uppercase tracking-tight"
+                      >
+                        📄 Invoice
+                      </Button>
+                    )}
+                    {order.buyer_review_submitted ? (
+                      <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-700">
+                        <span>✅</span> Farmer review submitted
+                      </div>
+                    ) : order.buyer_can_review ? (
+                      <Button
+                        variant="clay"
+                        onClick={() => openReviewModal(order, 'farmer')}
+                        className="flex-1 border-emerald-700 bg-emerald-700 py-2 text-white text-xs font-bold uppercase tracking-tight hover:bg-emerald-800"
+                      >
+                        ⭐ Review Farmer
+                      </Button>
+                    ) : (order.status === 'delivered' || order.status === 'completed') ? (
+                      <p className="w-full text-center text-[10px] font-medium text-amber-700 italic">
+                        Review window closed
+                      </p>
+                    ) : null}
+
+                    {(() => {
+                      const reviewableLogistics = getReviewableLogisticsForOrder(order.id)
+                      const deliveryDone = order.status === 'delivered' || order.status === 'completed'
+                      if (!reviewableLogistics) return null
+
+                      if (order.buyer_logistics_review_submitted) {
+                        return (
+                          <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-bold text-blue-700">
+                            <span>✅</span> Logistics review submitted
+                          </div>
+                        )
+                      }
+
+                      if (order.buyer_can_review_logistics) {
+                        return (
+                          <Button
+                            variant="clay"
+                            onClick={() => openReviewModal(order, 'logistics', reviewableLogistics)}
+                            className="flex-1 border-blue-700 bg-blue-700 py-2 text-white text-xs font-bold uppercase tracking-tight hover:bg-blue-800"
+                          >
+                            🚛 Review Logistics
+                          </Button>
+                        )
+                      }
+
+                      if (deliveryDone) {
+                        return <p className="mt-1 text-xs text-center w-full text-amber-700">Logistics review window closed</p>
+                      }
+
+                      return null
+                    })()}
                   </div>
                 </div>
               ))}
@@ -905,42 +966,73 @@ export default function BuyerDashboardPage() {
           )}
         </Card>
 
-        <Card>
-          <p className="mb-4 text-lg font-semibold">Logistics</p>
-          {loading && <p className="text-sm text-text-muted">Loading logistics...</p>}
-          {!loading && recentLogistics.length === 0 && <p className="text-sm text-text-muted">No logistics updates yet.</p>}
+        <Card variant="clay">
+          <p className="mb-6 text-xl font-bold text-text-primary">Logistics Updates</p>
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10">
+              <div className="coin-loader mb-4" />
+              <p className="text-sm font-medium text-text-muted">Fetching logistics...</p>
+            </div>
+          )}
+          {!loading && recentLogistics.length === 0 && (
+            <Card variant="clay" className="bg-slate-50/50 p-8 text-center text-sm font-medium text-text-muted">
+              No logistics updates yet.
+            </Card>
+          )}
           {!loading && recentLogistics.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {recentLogistics.map((request) => {
                 const linkedOrder = orders.find((order) => Number(order.id) === Number(request.order))
                 const packageSize = Number(request.weight_kg || linkedOrder?.quantity || 0)
                 const hasInvoice = Number(request.quoted_fee || 0) > 0
 
                 return (
-                  <div key={request.id} className="rounded-[12px] border border-border px-3 py-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">Package size: {packageSize.toFixed(1)} kg</p>
-                        <p className="text-xs text-text-muted">
-                          Provider: {request.logistics_partner_name || `Partner #${request.logistics_partner}`}
-                        </p>
-                        <p className="text-xs text-text-muted">
-                          Route: {request.pickup_city || '-'}, {request.pickup_state || '-'} to {request.drop_city || '-'}, {request.drop_state || '-'}
-                        </p>
-                        <p className="text-xs text-text-muted">Fee: ₹{request.quoted_fee || '0.00'}</p>
-                        <p className="text-xs text-text-muted">Order: #{request.order}</p>
-                        {hasInvoice && linkedOrder && ['confirmed', 'delivered'].includes(linkedOrder.status) && (
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateLogisticInvoice(linkedOrder)}
-                            className="mt-2 rounded-[8px] bg-emerald-700 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-800"
-                          >
-                            Logistic Invoice
-                          </button>
-                        )}
+                  <div key={request.id} className="clay-card !rounded-[24px] bg-white/60 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-xl shadow-inner">
+                          🚛
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-text-primary leading-tight line-clamp-1">
+                            {request.logistics_partner_name || `Partner #${request.logistics_partner}`}
+                          </p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Logistics Partner</p>
+                        </div>
                       </div>
-                      <span className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text-primary">{formatStatus(request.status)}</span>
+                      <span className="clay-card !rounded-full bg-surface-2 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-text-primary shadow-sm">
+                        {formatStatus(request.status)}
+                      </span>
                     </div>
+
+                    <div className="clay-input !rounded-[16px] mb-4 bg-slate-50/40 p-3 ring-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] uppercase font-bold text-text-muted">Route</p>
+                        <p className="text-[11px] font-bold text-text-primary text-right">
+                          {request.pickup_city || '-'} → {request.drop_city || '-'}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 border-t border-black/5 pt-2">
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-text-muted">Size</p>
+                          <p className="text-sm font-black">{packageSize.toFixed(1)} kg</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase font-bold text-text-muted">Fee</p>
+                          <p className="text-sm font-black text-blue-600">₹{request.quoted_fee || '0.00'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {hasInvoice && linkedOrder && ['confirmed', 'delivered', 'completed'].includes(linkedOrder.status) && (
+                      <Button
+                        variant="clay"
+                        onClick={() => handleGenerateLogisticInvoice(linkedOrder)}
+                        className="w-full border-blue-700 bg-blue-700 py-2 text-white text-xs font-bold uppercase tracking-tight hover:bg-blue-800"
+                      >
+                        📄 Logistic Invoice
+                      </Button>
+                    )}
                   </div>
                 )
               })}
@@ -948,63 +1040,106 @@ export default function BuyerDashboardPage() {
           )}
         </Card>
 
-        <Card>
-          <p className="mb-4 text-lg font-semibold">Recent Negotiations</p>
-          {loading && <p className="text-sm text-text-muted">Loading negotiations...</p>}
-          {!loading && recentNegotiations.length === 0 && <p className="text-sm text-text-muted">No negotiations yet.</p>}
+        <Card variant="clay">
+          <p className="mb-6 text-xl font-bold text-text-primary">Recent Negotiations</p>
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10">
+              <div className="coin-loader mb-4" />
+              <p className="text-sm font-medium text-text-muted">Fetching negotiations...</p>
+            </div>
+          )}
+          {!loading && recentNegotiations.length === 0 && (
+            <Card variant="clay" className="bg-slate-50/50 p-8 text-center text-sm font-medium text-text-muted">
+              No negotiations yet.
+            </Card>
+          )}
           {!loading && recentNegotiations.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {recentNegotiations.map((item) => (
-                <div key={item.id} className="rounded-[12px] border border-border px-3 py-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">Farmer: {item.farmer_name || `Farmer #${item.farmer}`}</p>
-                      <p className="text-xs text-text-muted">Ordered: {item.product_name || `Negotiation #${item.id}`}</p>
-                      <p className="text-xs text-text-muted">Quantity: {item.quantity} kg</p>
-                      <p className="text-xs text-text-muted">Negotiated price: ₹{getLatestOfferPerKg(item).toFixed(2)}/kg</p>
+                <div key={item.id} className="clay-card !rounded-[24px] bg-white/60 p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-xl shadow-inner">
+                        🤝
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-text-primary leading-tight line-clamp-1">
+                          {item.farmer_name || `Farmer #${item.farmer}`}
+                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Farmer</p>
+                      </div>
                     </div>
-                    <span className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text-primary">{formatStatus(item.status)}</span>
+                    <span className={`clay-card !rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      item.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
+                      item.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div className="clay-input !rounded-[16px] mb-4 bg-slate-50/40 p-3 ring-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] uppercase font-bold text-text-muted">Product</p>
+                      <p className="text-[11px] font-bold text-text-primary text-right">{item.product_name || `Negotiation #${item.id}`}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 border-t border-black/5 pt-2">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-text-muted">Quantity</p>
+                        <p className="text-sm font-black">{item.quantity} kg</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-text-muted">Negotiated Price</p>
+                        <p className="text-sm font-black text-amber-600">₹{getLatestOfferPerKg(item).toFixed(2)}/kg</p>
+                      </div>
+                    </div>
                   </div>
 
                   {canBuyerAct(item) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={counterOffers[item.id] || ''}
-                        onChange={(event) => setCounterOffers((prev) => ({ ...prev, [item.id]: event.target.value }))}
-                        placeholder="Counter ₹/kg"
-                        className="w-32 rounded-[8px] border border-border px-2 py-1 text-xs"
-                      />
-                      <button
-                        type="button"
-                        disabled={negotiationActionId === item.id}
-                        onClick={() => handleNegotiationAction(item, 'counter')}
-                        className="rounded-[8px] bg-amber-500 px-2 py-1 text-xs text-white hover:bg-amber-600 disabled:opacity-60"
-                      >
-                        Counter
-                      </button>
-                      <button
-                        type="button"
-                        disabled={negotiationActionId === item.id}
-                        onClick={() => handleNegotiationAction(item, 'accept')}
-                        className="rounded-[8px] bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-60"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        disabled={negotiationActionId === item.id}
-                        onClick={() => handleNegotiationAction(item, 'reject')}
-                        className="rounded-[8px] bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-60"
-                      >
-                        Decline
-                      </button>
+                    <div className="flex flex-col gap-4">
+                      <div className="relative">
+                        <Input
+                          variant="clay"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={counterOffers[item.id] || ''}
+                          onChange={(e) => setCounterOffers((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                          placeholder="Re-bid rate..."
+                          className="w-full !rounded-[20px] !p-4 !text-sm font-black text-slate-800 !bg-slate-50 !border-none !ring-1 !ring-slate-200 focus:!ring-amber-500 transition-all shadow-inner"
+                        />
+                        <button
+                          disabled={negotiationActionId === item.id}
+                          onClick={() => handleNegotiationAction(item, 'counter')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-[14px] shadow-md shadow-amber-500/20 active:scale-95 transition-transform"
+                        >
+                          Counter
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Button
+                          variant="clay"
+                          disabled={negotiationActionId === item.id}
+                          onClick={() => handleNegotiationAction(item, 'accept')}
+                          className="!py-3.5 !bg-gradient-to-br from-emerald-600 to-emerald-700 !text-white !rounded-[20px] text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                        >
+                          Confirm Deal
+                        </Button>
+                        <Button
+                          variant="clay"
+                          disabled={negotiationActionId === item.id}
+                          onClick={() => handleNegotiationAction(item, 'reject')}
+                          className="!py-3.5 !bg-slate-100 !text-slate-500 !rounded-[20px] text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                        >
+                          Decline
+                        </Button>
+                      </div>
                     </div>
                   )}
                   {['open', 'countered'].includes(item.status) && !canBuyerAct(item) && (
-                    <p className="mt-2 text-xs text-text-muted">Waiting for farmer response.</p>
+                    <div className="rounded-lg bg-slate-50 p-2 text-center text-[10px] font-medium text-text-muted italic">
+                      Waiting for farmer response...
+                    </div>
                   )}
                 </div>
               ))}
@@ -1013,40 +1148,50 @@ export default function BuyerDashboardPage() {
         </Card>
       </div>
 
-      <Card className="mt-6">
+      <Card variant="clay" className="mt-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-lg font-semibold">Nearby Farmers Map (OpenStreetMap)</p>
           <p className="text-sm text-text-muted">Radius: {NEARBY_RADIUS_KM} km</p>
         </div>
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-primary">What are you looking for?</label>
-            <select
-              value={selectedCategory}
-              onChange={(event) => {
-                setSelectedCategory(event.target.value)
-                setSelectedItem('all')
-              }}
-              className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
-            >
-              <option value="all">All Categories</option>
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>{formatStatus(category)}</option>
-              ))}
-            </select>
+        <div className="mb-8 grid gap-6 md:grid-cols-2">
+          <div className="relative group">
+            <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-4">Category Discovery</label>
+            <div className="relative">
+              <select
+                value={selectedCategory}
+                onChange={(event) => {
+                  setSelectedCategory(event.target.value)
+                  setSelectedItem('all')
+                }}
+                className="clay-input w-full !rounded-[24px] !p-6 !text-sm font-black text-slate-700 !bg-white/60 backdrop-blur-md border border-white/80 shadow-inner focus:!ring-accent/20 appearance-none"
+              >
+                <option value="all">🌾 All Farm Produce</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>{formatStatus(category)}</option>
+                ))}
+              </select>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-primary">Which item?</label>
-            <select
-              value={selectedItem}
-              onChange={(event) => setSelectedItem(event.target.value)}
-              className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
-            >
-              <option value="all">All Items</option>
-              {itemOptions.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+          <div className="relative group">
+            <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-4">Item Selection</label>
+            <div className="relative">
+              <select
+                value={selectedItem}
+                onChange={(event) => setSelectedItem(event.target.value)}
+                className="clay-input w-full !rounded-[24px] !p-6 !text-sm font-black text-slate-700 !bg-white/60 backdrop-blur-md border border-white/80 shadow-inner focus:!ring-accent/20 appearance-none"
+              >
+                <option value="all">🛒 All Available Items</option>
+                {itemOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+              </div>
+            </div>
           </div>
         </div>
         {mapLoading && <p className="text-sm text-text-muted">Loading map...</p>}
@@ -1076,30 +1221,59 @@ export default function BuyerDashboardPage() {
                 </Marker>
                 {farmerMarkers.map((marker) => (
                   <Marker key={marker.id} position={[marker.lat, marker.lon]}>
-                    <Popup>
-                      <strong>{marker.farmerName}</strong><br />
-                      {marker.city}, {marker.state}<br />
-                      {marker.distanceKm.toFixed(1)} km away
-                      <hr className="my-2" />
-                      <div className="space-y-2">
-                        {marker.products.map((product) => (
-                          <div key={product.id} className="rounded border border-border p-2">
-                            <p className="font-medium">{product.name}</p>
-                            <p className="text-xs">Category: {formatStatus(product.category)}</p>
-                            <p className="text-xs">Price: ₹{product.base_price}/kg</p>
-                            <p className="text-xs">Stock: {product.quantity_available} kg</p>
-                            <p className="text-xs">Harvest: {product.harvest_date || 'N/A'}</p>
-                            {product.description && <p className="mt-1 text-xs">{product.description}</p>}
-                            <button
-                              type="button"
-                              disabled={orderingId === product.id}
-                              onClick={() => handlePlaceOrder(product)}
-                              className="mt-2 rounded bg-accent px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
-                            >
-                              {orderingId === product.id ? 'Placing...' : 'Place Order'}
-                            </button>
+                    <Popup className="clay-popup-custom">
+                      <div className="min-w-[240px] p-2">
+                        <div className="flex items-center gap-3 mb-4 border-b border-slate-100 pb-3">
+                          <div className="bg-amber-100 p-2 rounded-xl text-amber-700 shadow-inner">
+                            <span className="text-xl">👩‍🌾</span>
                           </div>
-                        ))}
+                          <div>
+                            <p className="text-sm font-black text-slate-800 leading-tight">{marker.farmerName}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{marker.city}, {marker.state}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {marker.products.map((product) => (
+                            <div key={product.id} className="clay-input !rounded-[24px] p-4 bg-slate-50 border border-slate-100/50 shadow-sm overflow-hidden relative group">
+                              <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span className="text-2xl">📦</span>
+                              </div>
+                              <div className="mb-2">
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">{formatStatus(product.category)}</p>
+                                <p className="font-black text-slate-800 leading-none mb-1">{product.name}</p>
+                                <p className="text-[10px] font-bold text-slate-400 italic">Fresh from {product.harvest_date || 'farm'}</p>
+                              </div>
+                              
+                              <div className="flex items-end justify-between mb-4">
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Price</p>
+                                  <p className="text-lg font-black text-emerald-700 leading-none">₹{product.base_price}<span className="text-[10px] text-slate-400">/kg</span></p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">Stock</p>
+                                  <p className="text-sm font-black text-slate-700 leading-none">{product.quantity_available} kg</p>
+                                </div>
+                              </div>
+                              
+                              <Button
+                                type="button"
+                                variant="clay"
+                                disabled={orderingId === product.id}
+                                onClick={() => handlePlaceOrder(product)}
+                                className="w-full !rounded-[16px] !py-2.5 !bg-gradient-to-br from-emerald-600 to-emerald-700 !text-white text-[11px] font-black uppercase tracking-widest shadow-md shadow-emerald-500/20 active:scale-95"
+                              >
+                                {orderingId === product.id ? 'Loading...' : 'Negotiate / Order'}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="mt-4 pt-3 border-t border-slate-50 text-center">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            📍 {marker.distanceKm.toFixed(1)} km from your location
+                          </p>
+                        </div>
                       </div>
                     </Popup>
                   </Marker>
@@ -1114,186 +1288,314 @@ export default function BuyerDashboardPage() {
       </Card>
 
         {error && (
-          <Card className="mt-4 border-red-300 bg-red-50 text-red-700">
+          <Card variant="clay" className="mt-6 border-red-300 bg-red-50 text-red-700">
             <p>{error}</p>
           </Card>
         )}
       </PageShell>
 
       {orderProduct && (
-        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
-          <Card className="w-full max-w-md">
-            <p className="text-xl font-semibold text-accent">Place Order</p>
-            <p className="mt-2 text-sm text-text-muted">{orderProduct.name}</p>
-            <p className="text-sm text-text-muted">Price: ₹{orderProduct.base_price}/kg</p>
-            <p className="text-sm text-text-muted">Available: {orderProduct.quantity_available} kg</p>
-
-            {showOrderAnimation && (
-              <div className="mt-4 rounded-[12px] border border-emerald-200 bg-emerald-50/70 px-3 py-3 text-center">
-                <div className="mx-auto coin-loader" />
-                <p className="mt-2 text-sm font-medium text-emerald-800">{orderAnimationMessage}</p>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-emerald-950/40 backdrop-blur-xl px-4 p-8">
+          <Card variant="clay" className="w-full max-w-lg rounded-[48px] bg-white/95 backdrop-blur-3xl p-0 shadow-[0_32px_80px_-16px_rgba(46,125,50,0.3)] border border-white/80 animate-in fade-in zoom-in duration-500 overflow-hidden">
+            {/* Header Section */}
+            <div className="bg-gradient-to-br from-emerald-600 to-green-700 p-8 text-white relative">
+              <div className="absolute top-0 right-0 p-6">
+                <button onClick={closeOrderForm} className="text-white/60 hover:text-white transition-colors bg-white/10 p-2 rounded-xl backdrop-blur-md">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
               </div>
-            )}
+              <div className="flex items-center gap-6">
+                <div className="bg-white/20 p-4 rounded-[24px] shadow-inner backdrop-blur-md border border-white/20">
+                  <span className="text-4xl">🌱</span>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight leading-tight">Secure Trade</h2>
+                  <p className="text-green-100 text-[11px] font-black uppercase tracking-widest mt-1 opacity-80">Direct Transaction & Negotiation</p>
+                </div>
+              </div>
+            </div>
 
-            <form onSubmit={submitOrderForm} className="mt-4 space-y-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Order Type</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setOrderMode('direct')}
-                    className={`rounded-[10px] border px-3 py-2 text-sm ${orderMode === 'direct' ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-primary'}`}
-                  >
-                    Buy at listed price
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOrderMode('negotiate')}
-                    className={`rounded-[10px] border px-3 py-2 text-sm ${orderMode === 'negotiate' ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-primary'}`}
-                  >
-                    Negotiate price
-                  </button>
+            <div className="p-10 space-y-8">
+              {/* Product Info Card */}
+              <div className="clay-input !rounded-[32px] p-6 bg-emerald-50/50 border border-emerald-100/50 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Authentic Produce</p>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none">{orderProduct.name}</h3>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Standard Rate</p>
+                  <p className="text-xl font-black text-emerald-700">₹{orderProduct.base_price}<span className="text-xs font-bold text-slate-400 font-sans">/kg</span></p>
                 </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Quantity (kg)</label>
-                <Input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={orderQuantity}
-                  onChange={(event) => setOrderQuantity(event.target.value)}
-                  placeholder="Enter quantity in kg"
-                  required
-                />
-              </div>
-
-              {orderMode === 'negotiate' && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">Your Offer (₹/kg)</label>
-                  <Input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={offerPerKg}
-                    onChange={(event) => setOfferPerKg(event.target.value)}
-                    placeholder="Enter your price per kg"
-                    required
-                  />
+              {showOrderAnimation && (
+                <div className="rounded-[28px] border-2 border-emerald-200 bg-emerald-100/30 p-6 text-center animate-pulse">
+                  <div className="mx-auto coin-loader scale-75 mb-3" />
+                  <p className="text-sm font-black text-emerald-800 uppercase tracking-tight">{orderAnimationMessage}</p>
                 </div>
               )}
 
-              {orderFormError && <p className="text-sm text-red-600">{orderFormError}</p>}
-              <div className="flex gap-2">
-                <Button type="button" onClick={closeOrderForm} className="bg-surface-2 text-text-primary hover:bg-surface-2">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={orderingId === orderProduct.id}>
-                  {orderingId === orderProduct.id ? 'Submitting...' : (orderMode === 'negotiate' ? 'Send Negotiation' : 'Confirm Order')}
-                </Button>
-              </div>
-            </form>
+              <form onSubmit={submitOrderForm} className="space-y-8">
+                {/* Mode Selector */}
+                <div>
+                  <label className="mb-4 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Select Transaction Type</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setOrderMode('direct')}
+                      className={`relative overflow-hidden rounded-[24px] p-5 text-left transition-all duration-300 border-2 ${
+                        orderMode === 'direct' 
+                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
+                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-emerald-200'
+                      }`}
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Option 1</p>
+                      <p className="text-lg font-black leading-tight">Direct Buy</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderMode('negotiate')}
+                      className={`relative overflow-hidden rounded-[24px] p-5 text-left transition-all duration-300 border-2 ${
+                        orderMode === 'negotiate' 
+                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
+                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-emerald-200'
+                      }`}
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Option 2</p>
+                      <p className="text-lg font-black leading-tight">Negotiate</p>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="relative group">
+                    <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Order Quantity</label>
+                    <div className="relative">
+                      <Input
+                        variant="clay"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={orderQuantity}
+                        onChange={(event) => setOrderQuantity(event.target.value)}
+                        placeholder="0.0"
+                        className="!rounded-[24px] !p-6 !text-3xl font-black text-slate-800 !bg-slate-50 !border-none !ring-1 !ring-slate-200 focus:!ring-emerald-500 transition-all"
+                        required
+                      />
+                      <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">KG</span>
+                    </div>
+                    <p className="mt-2 text-[10px] font-bold text-emerald-600 px-2 uppercase tracking-tight">Available: {orderProduct.quantity_available} kg</p>
+                  </div>
+
+                  {orderMode === 'negotiate' && (
+                    <div className="relative group animate-in slide-in-from-right duration-300">
+                      <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Your Offer</label>
+                      <div className="relative">
+                        <Input
+                          variant="clay"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={offerPerKg}
+                          onChange={(event) => setOfferPerKg(event.target.value)}
+                          placeholder="0.0"
+                          className="!rounded-[24px] !p-6 !text-3xl font-black text-emerald-600 !bg-emerald-50 !border-none !ring-1 !ring-emerald-200 focus:!ring-emerald-500 transition-all"
+                          required
+                        />
+                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-black text-emerald-300">₹</span>
+                        <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-emerald-400 uppercase">/KG</span>
+                      </div>
+                      <p className="mt-2 text-[10px] font-bold text-slate-400 px-2 uppercase tracking-tight italic">Market Avg: ₹{orderProduct.base_price}</p>
+                    </div>
+                  )}
+                </div>
+
+                {orderFormError && <div className="p-4 bg-red-50 border-2 border-red-100 text-red-700 rounded-3xl text-[11px] font-black uppercase tracking-widest text-center">{orderFormError}</div>}
+                
+                <div className="flex gap-6 pt-4">
+                  <Button type="button" onClick={closeOrderForm} variant="clay" className="flex-1 !bg-slate-100 !text-slate-500 font-black py-5 !rounded-[24px] active:scale-95 transition-transform">
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="clay" disabled={orderingId === orderProduct.id} className="flex-1 !bg-gradient-to-br from-emerald-600 to-emerald-700 !text-white font-black py-5 !rounded-[24px] shadow-xl shadow-emerald-500/30 active:scale-95 transition-transform">
+                    {orderingId === orderProduct.id ? 'Processing...' : (orderMode === 'negotiate' ? 'Send Bid' : 'Pay Now')}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </Card>
         </div>
       )}
 
       {sellFastBuyTarget && (
-        <div className="fixed inset-0 z-[1120] flex items-center justify-center bg-black/45 p-4">
-          <Card className="w-full max-w-md">
-            <p className="text-xl font-semibold text-red-700">Buy Emergency Alert</p>
-            <p className="mt-2 text-sm text-text-primary">
-              {sellFastBuyTarget.farmer_name} selling {sellFastBuyTarget.product_name}
-            </p>
-            <p className="text-sm text-text-muted">
-              Available: {Number(sellFastBuyTarget.quantity_kg || 0).toFixed(1)} kg
-              {sellFastBuyTarget.price_per_kg ? ` | Fixed price: ₹${sellFastBuyTarget.price_per_kg}/kg` : ''}
-            </p>
-            <p className="mt-1 text-xs text-red-700">No bargaining is allowed for emergency purchases.</p>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-red-950/40 backdrop-blur-xl px-4 p-8">
+          <Card variant="clay" className="w-full max-w-lg rounded-[48px] bg-white/95 backdrop-blur-3xl p-0 shadow-[0_32px_80px_-16px_rgba(220,38,38,0.3)] border border-white/80 animate-in fade-in zoom-in duration-500 overflow-hidden">
+            {/* Urgent Header */}
+            <div className="bg-gradient-to-br from-red-600 to-red-800 p-8 text-white relative">
+              <div className="absolute top-0 right-0 p-6">
+                <button onClick={closeSellFastBuyModal} className="text-white/60 hover:text-white transition-colors bg-white/10 p-2 rounded-xl backdrop-blur-md">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="bg-white/20 p-4 rounded-[24px] shadow-inner backdrop-blur-md border border-white/20">
+                  <span className="text-4xl animate-pulse">🔥</span>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight leading-tight">Emergency Buy</h2>
+                  <p className="text-red-100 text-[11px] font-black uppercase tracking-widest mt-1 opacity-80 italic">Verified Priority Transaction</p>
+                </div>
+              </div>
+            </div>
 
-            <form onSubmit={submitSellFastBuy} className="mt-4 space-y-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Quantity (kg)</label>
-                <Input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={sellFastBuyQuantity}
-                  onChange={(event) => setSellFastBuyQuantity(event.target.value)}
-                  placeholder="Enter quantity in kg"
-                  required
-                />
+            <div className="p-10 space-y-8">
+              {/* Product Info Card */}
+              <div className="clay-input !rounded-[32px] p-6 bg-red-50/50 border border-red-100/50 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Direct from {sellFastBuyTarget.farmer_name}</p>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none">{sellFastBuyTarget.product_name}</h3>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fixed Rate</p>
+                  <p className="text-xl font-black text-red-700">₹{sellFastBuyTarget.price_per_kg}<span className="text-xs font-bold text-slate-400 font-sans">/kg</span></p>
+                </div>
               </div>
 
-              {sellFastBuyError ? <p className="text-sm text-red-600">{sellFastBuyError}</p> : null}
+              <form onSubmit={submitSellFastBuy} className="space-y-8">
+                <div className="relative group">
+                  <label className="mb-3 block text-xs font-black text-slate-400 uppercase tracking-widest px-4 font-sans">Required Quantity</label>
+                  <div className="relative">
+                    <Input
+                      variant="clay"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={sellFastBuyQuantity}
+                      onChange={(event) => setSellFastBuyQuantity(event.target.value)}
+                      placeholder="0.0"
+                      className="!rounded-[24px] !p-6 !text-4xl font-black text-slate-800 !bg-slate-50 !border-none !ring-1 !ring-slate-200 focus:!ring-red-500 transition-all"
+                      required
+                    />
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">KG UNIT</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between px-2">
+                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-tight">Limit: {Number(sellFastBuyTarget.quantity_kg || 0).toFixed(1)} kg</p>
+                    <p className="text-[10px] font-bold text-red-700/60 uppercase tracking-tight">* No bargaining allowed</p>
+                  </div>
+                </div>
 
-              <div className="flex gap-2">
-                <Button type="button" onClick={closeSellFastBuyModal} className="bg-surface-2 text-text-primary hover:bg-surface-2">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={sellFastBuyLoading}>
-                  {sellFastBuyLoading ? 'Processing...' : 'Continue To Pay'}
-                </Button>
-              </div>
-            </form>
+                {sellFastBuyError && <div className="p-4 bg-red-50 border-2 border-red-100 text-red-700 rounded-3xl text-[11px] font-black uppercase tracking-widest text-center animate-shake">{sellFastBuyError}</div>}
+                
+                <div className="flex gap-6 pt-4">
+                  <Button type="button" onClick={closeSellFastBuyModal} variant="clay" className="flex-1 !bg-slate-100 !text-slate-500 font-black py-5 !rounded-[24px] active:scale-95 transition-transform">
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="clay" disabled={sellFastBuyLoading} className="flex-1 !bg-gradient-to-br from-red-600 to-red-700 !text-white font-black py-5 !rounded-[24px] shadow-xl shadow-red-500/30 active:scale-95 transition-transform">
+                    {sellFastBuyLoading ? 'Authorizing...' : 'Pay with G-Pay'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </Card>
         </div>
       )}
 
       {reviewTarget && (
-        <div className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/45 p-4">
-          <Card className="w-full max-w-md">
-            <p className="text-xl font-semibold text-accent">
-              {reviewTarget.target === 'logistics' ? 'Rate Logistics Partner' : 'Rate Farmer'}
-            </p>
-            <p className="mt-2 text-sm text-text-muted">
-              Order #{reviewTarget.order.id} • {reviewTarget.order.product_name}
-            </p>
-            {reviewTarget.target === 'logistics' ? (
-              <p className="mt-1 text-xs text-text-muted">
-                Partner: {reviewTarget.logisticsRequest?.logistics_partner_name || `Partner #${reviewTarget.logisticsRequest?.logistics_partner || ''}`}
-              </p>
-            ) : null}
-            <form onSubmit={submitReview} className="mt-4 space-y-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Rating (1 to 5)</label>
-                <select
-                  value={reviewRating}
-                  onChange={(event) => setReviewRating(event.target.value)}
-                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
-                >
-                  {[5, 4, 3, 2, 1].map((value) => (
-                    <option key={value} value={String(value)}>{value}</option>
-                  ))}
-                </select>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/40 backdrop-blur-xl px-4 p-8">
+          <Card variant="clay" className="w-full max-w-lg rounded-[48px] bg-white/95 backdrop-blur-3xl p-0 shadow-[0_32px_80px_-16px_rgba(46,125,50,0.3)] border border-white/80 animate-in fade-in zoom-in duration-500 overflow-hidden">
+            {/* Review Header */}
+            <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-8 text-white relative">
+              <div className="absolute top-0 right-0 p-6">
+                <button onClick={closeReviewModal} className="text-white/60 hover:text-white transition-colors bg-white/10 p-2 rounded-xl backdrop-blur-md">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="bg-white/20 p-4 rounded-[24px] shadow-inner backdrop-blur-md border border-white/20">
+                  <span className="text-4xl text-amber-400">⭐</span>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight leading-tight">Client Feedback</h2>
+                  <p className="text-slate-300 text-[11px] font-black uppercase tracking-widest mt-1 opacity-80 italic">Order Ref: #{reviewTarget.order.id}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-10 space-y-8">
+              {/* Target Summary Card */}
+              <div className="clay-input !rounded-[32px] p-6 bg-slate-50 border border-slate-100 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Feedback Target</p>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight leading-none uppercase">
+                    {reviewTarget.target === 'logistics' ? 'Logistics Partner' : 'Certified Farmer'}
+                  </h3>
+                </div>
+                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 italic font-black text-slate-400 text-xs">
+                  {reviewTarget.order.product_name}
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Comment (optional)</label>
-                <textarea
-                  value={reviewComment}
-                  onChange={(event) => setReviewComment(event.target.value)}
-                  rows={3}
-                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
-                  placeholder={
-                    reviewTarget.target === 'logistics'
-                      ? 'Share your delivery experience with the logistics partner'
-                      : 'Share your experience with the farmer'
-                  }
-                />
-              </div>
+              <form onSubmit={submitReview} className="space-y-8">
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <label className="mb-4 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Global Rating</label>
+                    <div className="grid grid-cols-5 gap-2">
+                       {[1, 2, 3, 4, 5].map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setReviewRating(String(value))}
+                          className={`aspect-square rounded-2xl flex items-center justify-center text-xl transition-all border-2 ${
+                            Number(reviewRating) >= value
+                              ? 'bg-amber-100 border-amber-400 text-amber-600 shadow-sm'
+                              : 'bg-slate-50 border-slate-100 text-slate-300'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-4 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Dropdown Pick</label>
+                    <select
+                      value={reviewRating}
+                      onChange={(event) => setReviewRating(event.target.value)}
+                      className="clay-input w-full !rounded-[20px] !p-4 !text-sm font-black text-slate-700 !bg-slate-50 border-none ring-1 ring-slate-200"
+                    >
+                      {[5, 4, 3, 2, 1].map((value) => (
+                        <option key={value} value={String(value)}>{value} Stars {value >= 4 ? ' - Highly Recommended' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-              {reviewError ? <p className="text-sm text-red-600">{reviewError}</p> : null}
+                <div>
+                  <label className="mb-4 block text-xs font-black text-slate-400 uppercase tracking-widest px-2">Detailed experience</label>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(event) => setReviewComment(event.target.value)}
+                    rows={4}
+                    className="clay-input w-full !rounded-[32px] !p-6 !text-sm font-black text-slate-800 !bg-slate-50 !border-none !ring-1 !ring-slate-200 focus:!ring-slate-400 transition-all placeholder:text-slate-300"
+                    placeholder={
+                      reviewTarget.target === 'logistics'
+                        ? 'Write about transport quality, timing, and professionalism...'
+                        : 'Write about produce quality, communication, and overall trade...'
+                    }
+                  />
+                </div>
 
-              <div className="flex gap-2">
-                <Button type="button" onClick={closeReviewModal} className="bg-surface-2 text-text-primary hover:bg-surface-2">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={reviewSubmitting}>
-                  {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
-                </Button>
-              </div>
-            </form>
+                {reviewError && <div className="p-4 bg-red-50 border-2 border-red-100 text-red-700 rounded-3xl text-[11px] font-black uppercase tracking-widest text-center">{reviewError}</div>}
+                
+                <div className="flex gap-6 pt-4">
+                  <Button type="button" onClick={closeReviewModal} variant="clay" className="flex-1 !bg-slate-100 !text-slate-500 font-black py-5 !rounded-[24px] active:scale-95 transition-transform">
+                    Discard
+                  </Button>
+                  <Button type="submit" variant="clay" disabled={reviewSubmitting} className="flex-1 !bg-gradient-to-br from-slate-600 to-slate-800 !text-white font-black py-5 !rounded-[24px] shadow-xl shadow-slate-500/30 active:scale-95 transition-transform">
+                    {reviewSubmitting ? 'Registering...' : 'Publish Review'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </Card>
         </div>
       )}
@@ -1308,6 +1610,6 @@ export default function BuyerDashboardPage() {
       />
 
       <BuyerFarmerChatWidget />
-    </>
+    </div>
   )
 }

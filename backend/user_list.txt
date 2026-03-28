@@ -1,0 +1,4 @@
+admin.demo | admin | admin.demo@khetbazar.in | 9000000000
+farmer.demo | farmer | farmer.demo@khetbazar.in | 9000000001
+buyer.demo | buyer | buyer.demo@khetbazar.in | 9000000002
+logistics.demo | logistics | logistics.demo@khetbazar.in | 9000000003

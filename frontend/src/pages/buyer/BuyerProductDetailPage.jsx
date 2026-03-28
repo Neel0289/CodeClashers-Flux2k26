@@ -125,32 +125,49 @@ export default function BuyerProductDetailPage() {
 
   return (
     <PageShell title={product?.name || `Product ${id}`}>
-      <div className="grid gap-4 rounded-2xl border border-border bg-surface p-5 md:grid-cols-2">
-        <div className="grid gap-2">
-          <p className="text-sm text-text-muted">Farmer Location</p>
-          <p className="text-base text-text-primary">{product?.city}, {product?.state}</p>
-          <p className="text-sm text-text-muted">Price set by farmer</p>
-          <p className="text-xl font-semibold text-accent-bright">Rs {product?.base_price}/{product?.unit}</p>
-          <p className="text-sm text-text-muted">Available: {product?.quantity_available} {product?.unit}</p>
+      <div className="clay-card !rounded-[32px] grid gap-8 bg-white p-8 shadow-clay-card md:grid-cols-2">
+        <div className="grid gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Farmer Location</p>
+            <p className="mt-1 text-lg font-medium text-text-primary">{product?.city}, {product?.state}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Price set by farmer</p>
+            <p className="mt-1 text-3xl font-extrabold text-accent">Rs {product?.base_price}/{product?.unit}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Available Stock</p>
+            <p className="mt-1 text-lg font-medium text-text-primary">{product?.quantity_available} {product?.unit}</p>
+          </div>
         </div>
 
-        <div className="grid gap-3">
-          <Input
-            name="quantity"
-            type="number"
-            min="1"
-            step="0.1"
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            placeholder="Quantity"
-          />
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-sm text-text-muted">Order Total (farmer price)</p>
-            <p className="text-2xl font-semibold text-text-primary">Rs {totalAmount.toFixed(2)}</p>
+        <div className="grid gap-6">
+          <div>
+            <label className="mb-2 block text-sm font-bold text-text-primary">Order Quantity ({product?.unit})</label>
+            <Input
+              variant="clay"
+              name="quantity"
+              type="number"
+              min="1"
+              step="0.1"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              placeholder="Quantity"
+            />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="button" onClick={handlePlaceOrderAndPay} disabled={submitting} className={submitting ? 'opacity-70' : ''}>
-            {submitting ? 'Processing...' : 'Place Order & Pay'}
+          <div className="clay-input flex flex-col justify-center p-6">
+            <p className="text-sm font-medium text-text-muted">Estimated Order Total</p>
+            <p className="mt-1 text-4xl font-extrabold text-text-primary">Rs {totalAmount.toFixed(2)}</p>
+          </div>
+          {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+          <Button
+            variant="clay"
+            type="button"
+            onClick={handlePlaceOrderAndPay}
+            disabled={submitting}
+            className={`w-full py-4 text-lg ${submitting ? 'opacity-70' : ''}`}
+          >
+            {submitting ? 'Processing...' : 'Place Order & Pay Now'}
           </Button>
         </div>
       </div>
