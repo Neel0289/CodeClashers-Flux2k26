@@ -25,6 +25,8 @@ const CERTIFICATE_OPTIONS = [
 ]
 
 const INDIAN_VEHICLE_NUMBER_REGEX = /^(?:[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{4}|\d{2}\s?BH\s?\d{4}\s?[A-Z]{1,2})$/
+const INDIAN_BANK_ACCOUNT_NUMBER_REGEX = /^\d{9,18}$/
+const INDIAN_IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/
 
 const createEmptyLogisticsVehicle = () => ({
   vehicle_type: 'truck',
@@ -136,7 +138,14 @@ export default function RegisterPage() {
   }
 
   const updateBankField = (field, val) => {
-    setBankDetails(prev => ({ ...prev, [field]: val }))
+    let nextValue = val
+    if (field === 'number') {
+      nextValue = String(val || '').replace(/\D/g, '').slice(0, 18)
+    }
+    if (field === 'ifsc') {
+      nextValue = String(val || '').toUpperCase().replace(/\s/g, '').slice(0, 11)
+    }
+    setBankDetails(prev => ({ ...prev, [field]: nextValue }))
   }
 
   const toggleCertificate = (val) => {
@@ -200,6 +209,42 @@ export default function RegisterPage() {
     const formEl = event.currentTarget
     const formData = new FormData(formEl)
 
+    const normalizedBankAccountNumber = String(bankDetails.number || '').replace(/\D/g, '')
+    const normalizedIfsc = String(bankDetails.ifsc || '').toUpperCase().replace(/\s/g, '')
+
+    if (!INDIAN_BANK_ACCOUNT_NUMBER_REGEX.test(normalizedBankAccountNumber)) {
+      setError('Please enter a valid Indian bank account number (9 to 18 digits).')
+      setSubmitting(false)
+      return
+    }
+
+    if (normalizedIfsc.length !== 11) {
+      setError('IFSC code must be exactly 11 characters.')
+      setSubmitting(false)
+      return
+    }
+
+    if (!/^[A-Z]{4}/.test(normalizedIfsc)) {
+      setError('IFSC code must start with 4 alphabetic characters (e.g., SBIN).')
+      setSubmitting(false)
+      return
+    }
+
+    if (normalizedIfsc[4] !== '0') {
+      setError('The 5th character in IFSC code must be 0.')
+      setSubmitting(false)
+      return
+    }
+
+    if (!INDIAN_IFSC_REGEX.test(normalizedIfsc)) {
+      setError('Please enter a valid IFSC code (format: ABCD0XXXXXX).')
+      setSubmitting(false)
+      return
+    }
+
+    formData.set('bank_account_number', normalizedBankAccountNumber)
+    formData.set('bank_ifsc', normalizedIfsc)
+
     // For farmer: validate shared login fields and map farm coordinates
     if (role === 'farmer') {
       const phone = String(formData.get('phone') || '').trim()
@@ -232,8 +277,8 @@ export default function RegisterPage() {
 
       // Attach bank details from state directly as it's controlled
       formData.set('bank_account_holder', bankDetails.holder)
-      formData.set('bank_account_number', bankDetails.number)
-      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_account_number', normalizedBankAccountNumber)
+      formData.set('bank_ifsc', normalizedIfsc)
       formData.set('bank_name', bankDetails.bankName)
       formData.set('bank_branch', bankDetails.branch)
 
@@ -253,8 +298,8 @@ export default function RegisterPage() {
 
       // Attach bank details
       formData.set('bank_account_holder', bankDetails.holder)
-      formData.set('bank_account_number', bankDetails.number)
-      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_account_number', normalizedBankAccountNumber)
+      formData.set('bank_ifsc', normalizedIfsc)
       formData.set('bank_name', bankDetails.bankName)
       formData.set('bank_branch', bankDetails.branch)
 
@@ -309,8 +354,8 @@ export default function RegisterPage() {
 
       // Attach bank details
       formData.set('bank_account_holder', bankDetails.holder)
-      formData.set('bank_account_number', bankDetails.number)
-      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_account_number', normalizedBankAccountNumber)
+      formData.set('bank_ifsc', normalizedIfsc)
       formData.set('bank_name', bankDetails.bankName)
       formData.set('bank_branch', bankDetails.branch)
       // Attach passbook if shared
@@ -444,8 +489,8 @@ export default function RegisterPage() {
                   </div>
                 )}
                 <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
-                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
-                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} minLength={9} maxLength={18} pattern="\d{9,18}" title="Enter 9 to 18 digits" required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} minLength={11} maxLength={11} pattern="[A-Z]{4}0[A-Z0-9]{6}" title="Format: 4 letters, 0, then 6 alphanumeric characters" required />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input name="bank_name" placeholder="Bank name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
                   <Input name="bank_branch" placeholder="Branch name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />
@@ -522,8 +567,8 @@ export default function RegisterPage() {
                   </div>
                 )}
                 <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
-                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
-                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} minLength={9} maxLength={18} pattern="\d{9,18}" title="Enter 9 to 18 digits" required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} minLength={11} maxLength={11} pattern="[A-Z]{4}0[A-Z0-9]{6}" title="Format: 4 letters, 0, then 6 alphanumeric characters" required />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input name="bank_name" placeholder="Bank Name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
                   <Input name="bank_branch" placeholder="Branch Name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />
@@ -637,8 +682,8 @@ export default function RegisterPage() {
                   </div>
                 )}
                 <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
-                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
-                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} minLength={9} maxLength={18} pattern="\d{9,18}" title="Enter 9 to 18 digits" required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} minLength={11} maxLength={11} pattern="[A-Z]{4}0[A-Z0-9]{6}" title="Format: 4 letters, 0, then 6 alphanumeric characters" required />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input name="bank_name" placeholder="Bank Name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
                   <Input name="bank_branch" placeholder="Branch Name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />

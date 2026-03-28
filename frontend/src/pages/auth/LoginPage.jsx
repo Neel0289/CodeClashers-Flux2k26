@@ -154,17 +154,15 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {!isFarmer && (
-            <>
-              <Button type="button" className="border border-border bg-white text-text-primary hover:bg-surface-2 shadow-sm font-semibold" onClick={handleGoogleLogin} disabled={googleLoading}>
-                {googleLoading ? 'Connecting...' : '🔵 Login with Google'}
-              </Button>
-              <div className="relative my-2 text-center text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                <span className="relative z-10 bg-surface px-3">or continue with email</span>
-                <div className="absolute top-1/2 w-full h-px bg-border group-hover:bg-accent/20 transition-all" />
-              </div>
-            </>
-          )}
+          <>
+            <Button type="button" className="border border-border bg-white text-text-primary hover:bg-surface-2 shadow-sm font-semibold" onClick={handleGoogleLogin} disabled={googleLoading}>
+              {googleLoading ? 'Connecting...' : '🔵 Login with Google'}
+            </Button>
+            <div className="relative my-2 text-center text-[10px] font-bold uppercase tracking-widest text-text-muted">
+              <span className="relative z-10 bg-surface px-3">{isFarmer ? 'or continue with mobile' : 'or continue with email'}</span>
+              <div className="absolute top-1/2 w-full h-px bg-border group-hover:bg-accent/20 transition-all" />
+            </div>
+          </>
 
           {isFarmer ? (
             <Input name="mobile" type="tel" placeholder="Your 10-digit mobile number" maxLength={10} required className="text-lg py-4" />

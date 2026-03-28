@@ -1,40 +1,121 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, X, Volume2, CheckCircle, RotateCcw } from 'lucide-react'
+import { PRODUCT_OPTIONS } from './productCatalog'
 
-const ALL_PRODUCTS_MAP = {
+const PRODUCT_ALIASES = {
   vegetables: {
-    'Tomato': ['ટામેટા', 'ટમેટા', 'टमाटर', 'tomato'],
-    'Onion': ['ડુંગળી', 'કાંદા', 'प्याज़', 'onion'],
-    'Potato': ['બટેટા', 'બટાકા', 'આલુ', 'आलू', 'potato'],
-    'Cabbage': ['કોબીજ', 'કોબી', 'पत गोभी', 'cabbage'],
-    'Cauliflower': ['ફૂલેવર', 'ફૂલગોભી', 'फूलगोभी', 'cauliflower'],
-    'Carrot': ['ગાજર', 'गाजर', 'carrot'],
-    'Spinach': ['પાલક', 'पालक', 'spinach'],
-    'Brinjal': ['રીંગણ', 'બેંગન', 'बैंगन', 'brinjal'],
-    'Green Chilli': ['લીલા મરચા', 'हरी मिर्च', 'green chilli'],
+    Tomato: ['ટામેટા', 'ટમેટા', 'टमाटर', 'tamatar'],
+    Onion: ['ડુંગળી', 'કાંદા', 'प्याज़', 'pyaz', 'kanda'],
+    Potato: ['બટેટા', 'બટાકા', 'આલુ', 'आलू', 'aloo', 'batata'],
+    Cabbage: ['કોબીજ', 'કોબી', 'पत गोभी', 'patta gobhi'],
+    Cauliflower: ['ફૂલેવર', 'ફૂલગોભી', 'फूलगोभी', 'phool gobhi'],
+    Carrot: ['ગાજર', 'गाजर', 'gajar'],
+    Beetroot: ['ચુકંદર', 'चुकंदर', 'beet root'],
+    Spinach: ['પાલક', 'पालक'],
+    Coriander: ['ધાણા', 'हरा धनिया', 'dhania', 'coriander leaves'],
+    Brinjal: ['રીંગણ', 'બેંગન', 'बैंगन', 'baingan', 'eggplant'],
+    Capsicum: ['શિમલા મરચા', 'शिमला मिर्च', 'shimla mirch', 'bell pepper'],
+    'Green Chilli': ['લીલા મરચા', 'हरी मिर्च', 'hari mirch', 'mirchi'],
+    Cucumber: ['કાકડી', 'खीरा', 'kheera'],
+    Pumpkin: ['કોળું', 'कद्दू', 'kaddu'],
+    'Bottle Gourd': ['દૂધી', 'लौकी', 'lauki', 'dudhi'],
+    Ladyfinger: ['ભીંડા', 'भिंडी', 'bhindi', 'okra'],
+    Peas: ['વટાણા', 'मटर', 'matar'],
+    Radish: ['મૂળા', 'मूली', 'mooli'],
   },
   fruits: {
-    'Banana': ['કેળા', 'કેળું', 'કેળુ', 'केला', 'banana'],
-    'Mango': ['કેરી', 'आम', 'mango'],
-    'Apple': ['સફરજન', 'સેબ', 'apple'],
-    'Orange': ['સંતરા', 'નારંગી', 'संतरा', 'orange'],
-    'Papaya': ['પપૈયું', 'પપૈયુ', 'पपीता', 'papaya'],
-    'Watermelon': ['તરબૂચ', 'तरबूज', 'watermelon'],
+    Banana: ['કેળા', 'કેળું', 'केला', 'kela'],
+    Apple: ['સફરજન', 'सेब', 'seb'],
+    Mango: ['કેરી', 'आम', 'aam'],
+    Orange: ['નારંગી', 'संतरा', 'santra'],
+    Grapes: ['દ્રાક્ષ', 'अंगूर', 'angoor'],
+    Pomegranate: ['દાડમ', 'अनार', 'anar'],
+    Papaya: ['પપૈયું', 'पपीता', 'papita'],
+    Watermelon: ['તરબૂચ', 'तरबूज', 'tarbooj'],
+    Muskmelon: ['ખરબૂજ', 'खरबूजा', 'kharbuja'],
+    Guava: ['જામફળ', 'अमरूद', 'amrood'],
+    Pineapple: ['અનાનસ', 'अनानास', 'ananas'],
+    Lemon: ['લીંબુ', 'नींबू', 'nimbu'],
+    'Sweet Lime': ['મોસંબી', 'मौसंबी', 'mosambi'],
+    Strawberry: ['સ્ટ્રોબેરી', 'स्ट्रॉबेरी'],
+    Pear: ['નાશપતી', 'नाशपाती', 'nashpati'],
+    Litchi: ['લીચી', 'लीची'],
   },
   grains: {
-    'Wheat': ['ઘઉં', 'ઘઉ', 'गेहूं', 'wheat'],
-    'Rice': ['ચોખા', 'ડાંગર', 'चावल', 'rice'],
-    'Bajra': ['બાજરી', 'બાજરો', 'बाजरा', 'bajra'],
-  }
+    Wheat: ['ઘઉં', 'गेहूं', 'gehun'],
+    Rice: ['ચોખા', 'चावल', 'chawal'],
+    Maize: ['મકાઈ', 'मक्का', 'makka', 'corn'],
+    Barley: ['જૌ', 'जौ', 'jau'],
+    Bajra: ['બાજરી', 'बाजरा'],
+    Jowar: ['જવાર', 'ज्वार'],
+    Ragi: ['રાગી', 'रागी', 'nachni'],
+    Oats: ['ओट्स'],
+    'Millet Mix': ['મિલેટ', 'millet'],
+    Chickpea: ['ચણા', 'चना', 'chana'],
+    Lentils: ['દાળ', 'दाल', 'dal'],
+    'Pigeon Pea': ['તુવેર', 'अरहर', 'toor', 'tur'],
+    'Green Gram': ['મૂંગ', 'मूंग', 'moong'],
+    'Black Gram': ['ઉડદ', 'उड़द', 'urad'],
+  },
+  spices: {
+    Turmeric: ['હળદર', 'हल्दी', 'haldi'],
+    Cumin: ['જીરું', 'जीरा', 'jeera'],
+    'Coriander Seeds': ['ધાણા બીજ', 'धनिया बीज', 'coriander seed'],
+    'Mustard Seeds': ['રાઈ', 'सरसों', 'rai', 'sarso'],
+    Fenugreek: ['મેથી', 'मेथी', 'methi'],
+    Cardamom: ['એલચી', 'इलायची', 'elaichi'],
+    'Black Pepper': ['કાળી મરી', 'काली मिर्च', 'kali mirch'],
+    Clove: ['લવિંગ', 'लौंग', 'laung'],
+    Cinnamon: ['દાલચિની', 'दालचीनी'],
+    'Dry Red Chilli': ['સુકા લાલ મરચા', 'सूखी लाल मिर्च'],
+    'Bay Leaf': ['તેજ પાન', 'तेज पत्ता', 'tej patta'],
+    Fennel: ['સોફ', 'सौंफ', 'saunf'],
+    Ajwain: ['અજમો', 'अजवाइन'],
+    Ginger: ['આદુ', 'अदरक', 'adrak'],
+    Garlic: ['લસણ', 'लहसुन', 'lehsun'],
+  },
 }
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildProductsMap() {
+  const map = {}
+  for (const [category, products] of Object.entries(PRODUCT_OPTIONS)) {
+    map[category] = {}
+    for (const productName of products) {
+      const aliases = new Set([
+        productName,
+        productName.toLowerCase(),
+        productName.replace(/\s+/g, ''),
+      ])
+
+      const customAliases = PRODUCT_ALIASES?.[category]?.[productName] || []
+      for (const alias of customAliases) aliases.add(alias)
+
+      map[category][productName] = Array.from(aliases)
+    }
+  }
+  return map
+}
+
+const ALL_PRODUCTS_MAP = buildProductsMap()
 
 function findBestProductMatch(text) {
   if (!text) return { name: text, category: null }
-  const query = text.trim().toLowerCase()
+  const query = normalizeText(text)
   
   for (const [cat, products] of Object.entries(ALL_PRODUCTS_MAP)) {
     for (const [engName, synonyms] of Object.entries(products)) {
-      if (synonyms.some(s => query.includes(s.toLowerCase()) || s.toLowerCase().includes(query))) {
+      if (synonyms.some((s) => {
+        const normalizedAlias = normalizeText(s)
+        return normalizedAlias && (query.includes(normalizedAlias) || normalizedAlias.includes(query))
+      })) {
          return { name: engName, category: cat }
       }
     }
@@ -122,14 +203,52 @@ function parseNumber(text) {
 }
 
 
-function speak(text, lang, onEnd) {
-  if (!window.speechSynthesis) return
-  window.speechSynthesis.cancel()
-  const utter = new SpeechSynthesisUtterance(text)
-  utter.lang = lang
-  utter.rate = 0.95
-  if (onEnd) utter.onend = onEnd
-  setTimeout(() => window.speechSynthesis.speak(utter), 100)
+function speak(text, lang, onEnd, onError) {
+  const safeEnd = () => {
+    if (typeof onEnd === 'function') onEnd()
+  }
+
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    if (typeof onError === 'function') {
+      onError('Speech output is not supported in this browser.')
+    }
+    setTimeout(safeEnd, 0)
+    return
+  }
+
+  try {
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.resume()
+
+    const utter = new SpeechSynthesisUtterance(String(text || ''))
+    utter.lang = lang
+    utter.rate = 0.95
+    utter.pitch = 1
+    utter.volume = 1
+
+    const voices = window.speechSynthesis.getVoices() || []
+    const exactVoice = voices.find((voice) => voice.lang?.toLowerCase() === String(lang).toLowerCase())
+    const baseVoice = voices.find((voice) => {
+      const wanted = String(lang).split('-')[0]?.toLowerCase()
+      return voice.lang?.toLowerCase().startsWith(wanted)
+    })
+    utter.voice = exactVoice || baseVoice || null
+
+    utter.onend = safeEnd
+    utter.onerror = () => {
+      if (typeof onError === 'function') {
+        onError('Could not play voice prompt. Check device volume and browser sound permissions.')
+      }
+      safeEnd()
+    }
+
+    window.speechSynthesis.speak(utter)
+  } catch {
+    if (typeof onError === 'function') {
+      onError('Voice playback failed. Please try again.')
+    }
+    setTimeout(safeEnd, 0)
+  }
 }
 
 function createRecognition(lang) {
@@ -162,6 +281,16 @@ export default function VoiceFormAssistant({ onFill, onClose }) {
     }
     setListening(false)
   }, [])
+
+  const testVoice = () => {
+    const sample = {
+      'gu-IN': 'આ અવાજ ચકાસણી છે. તમે મને સાંભળી શકો છો?',
+      'hi-IN': 'यह आवाज जांच है। क्या आप मुझे सुन पा रहे हैं?',
+      'en-US': 'This is a voice check. Can you hear me?',
+    }
+    setError('')
+    speak(sample[lang] || sample['en-US'], lang, null, (msg) => setError(msg))
+  }
 
   useEffect(() => () => stopAll(), [stopAll])
 
@@ -224,7 +353,7 @@ export default function VoiceFormAssistant({ onFill, onClose }) {
     const q = key === 'confirm' ? s.confirm(currentData) : s[key]
     setStep(idx)
     setQuestion(q)
-    speak(q, currentLang, () => listenForAnswer(idx, currentLang, currentData))
+    speak(q, currentLang, () => listenForAnswer(idx, currentLang, currentData), (msg) => setError(msg))
   }, [listenForAnswer])
 
   const startSession = () => {
@@ -232,7 +361,13 @@ export default function VoiceFormAssistant({ onFill, onClose }) {
     setData({ name: '', description: '', qty: '', price: '' })
     setDone(false)
     setStep(0)
-    speak(PROMPTS[lang].intro, lang, () => goToStep(0, lang, { name: '', description: '', qty: '', price: '' }))
+    setError('')
+    speak(
+      PROMPTS[lang].intro,
+      lang,
+      () => goToStep(0, lang, { name: '', description: '', qty: '', price: '' }),
+      (msg) => setError(msg),
+    )
   }
 
   return (
@@ -250,6 +385,23 @@ export default function VoiceFormAssistant({ onFill, onClose }) {
           {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
       </div>
+
+      <div className="mb-4 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={testVoice}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-2"
+        >
+          <Volume2 size={14} />
+          Test Voice
+        </button>
+      </div>
+
+      {error ? (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          {error}
+        </div>
+      ) : null}
 
       <div className="flex flex-col items-center justify-center py-6 relative">
         <div className="flex items-center gap-6">
