@@ -6,6 +6,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.market_prices.models import MarketPrice
+from apps.market_prices.services import fetch_market_prices
 from apps.market_prices.weather_service import get_tomorrow_weather
 from apps.orders.models import Order
 
@@ -45,6 +46,113 @@ def _summarize_market_prices(farmer_state):
         }
         for row in rows
     ]
+
+
+def _normalize_market_rows(rows):
+    normalized = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            commodity = str(row.get('commodity') or '').strip()
+            if not commodity:
+                continue
+            modal_quintal = float(row.get('modal_price') or row.get('modal_price_quintal') or 0)
+            normalized.append(
+                {
+                    'commodity': commodity,
+                    'market': str(row.get('market') or '').strip(),
+                    'modal_price_quintal': modal_quintal,
+                    'modal_price_kg': round(modal_quintal / 100, 2),
+                }
+            )
+            continue
+
+        commodity = str(getattr(row, 'commodity', '') or '').strip()
+        if not commodity:
+            continue
+        modal_quintal = float(getattr(row, 'modal_price', 0) or 0)
+        normalized.append(
+            {
+                'commodity': commodity,
+                'market': str(getattr(row, 'market', '') or '').strip(),
+                'modal_price_quintal': modal_quintal,
+                'modal_price_kg': round(modal_quintal / 100, 2),
+            }
+        )
+    return normalized
+
+
+def _summarize_market_prices_with_fetch(farmer_state):
+    summary = _summarize_market_prices(farmer_state)
+    if summary:
+        return summary
+
+    fetched = fetch_market_prices(state=farmer_state, limit=200)
+    normalized = _normalize_market_rows(fetched)
+    if not normalized:
+        return []
+
+    normalized.sort(key=lambda row: row.get('modal_price_quintal', 0), reverse=True)
+    return normalized[:8]
+
+
+def _build_trending_recommendations(demand, market, weather):
+    demand_map = {}
+    for row in demand or []:
+        product = str(row.get('product') or '').strip()
+        if product:
+            demand_map[product.lower()] = {
+                'name': product,
+                'qty_kg': float(row.get('qty_kg') or 0),
+            }
+
+    market_map = {}
+    for row in market or []:
+        commodity = str(row.get('commodity') or '').strip()
+        if commodity:
+            market_map[commodity.lower()] = {
+                'name': commodity,
+                'modal_price_kg': float(row.get('modal_price_kg') or 0),
+            }
+
+    candidates = []
+    overlap_keys = [key for key in demand_map.keys() if key in market_map]
+    if overlap_keys:
+        for key in overlap_keys:
+            demand_score = demand_map[key]['qty_kg']
+            price_score = market_map[key]['modal_price_kg']
+            combined = (demand_score * 0.6) + (price_score * 0.4)
+            candidates.append(
+                {
+                    'crop': demand_map[key]['name'],
+                    'demand_kg': demand_score,
+                    'modal_price_kg': round(price_score, 2),
+                    'score': round(combined, 2),
+                }
+            )
+    else:
+        for row in (demand or [])[:3]:
+            candidates.append(
+                {
+                    'crop': row.get('product') or 'Unknown',
+                    'demand_kg': float(row.get('qty_kg') or 0),
+                    'modal_price_kg': None,
+                    'score': float(row.get('qty_kg') or 0),
+                }
+            )
+
+    candidates.sort(key=lambda item: item['score'], reverse=True)
+    top = candidates[:3]
+
+    weather_action = ((weather or {}).get('price_recommendation') or {}).get('action', 'HOLD PRICE')
+    weather_reason = ((weather or {}).get('price_recommendation') or {}).get('reason', 'No weather recommendation available.')
+    weather_condition = (((weather or {}).get('condition') or ['Unknown'])[0])
+
+    return {
+        'top_crops': top,
+        'weather_action': weather_action,
+        'weather_reason': weather_reason,
+        'weather_condition': weather_condition,
+    }
 
 
 def _build_system_prompt():
@@ -87,6 +195,7 @@ def _build_contextual_fallback(message, context_block):
     weather = context_block.get('tomorrow_weather') or {}
     demand = context_block.get('nearby_demand_last_30_days_kg') or []
     market = context_block.get('state_market_prices_today') or []
+    trending = context_block.get('trending_crops') or {}
     location = context_block.get('farmer_location') or {}
     city = location.get('city') or 'your city'
     state = location.get('state') or 'your state'
@@ -157,18 +266,37 @@ def _build_contextual_fallback(message, context_block):
         top_market = market[:3]
         demand_text = ', '.join([f"{row['product']} ({row['qty_kg']:.0f}kg)" for row in top_demand]) if top_demand else 'No strong demand signal yet'
         market_text = ', '.join([f"{row['commodity']} (₹{row['modal_price_kg']:.0f}/kg)" for row in top_market]) if top_market else 'No mandi data available'
+        top_crops = trending.get('top_crops') or []
+        weather_action = trending.get('weather_action', 'HOLD PRICE')
+        weather_condition = trending.get('weather_condition', 'Unknown')
+        weather_reason = trending.get('weather_reason', 'No weather recommendation available.')
+
+        if top_crops:
+            crop_lines = []
+            for item in top_crops:
+                if item.get('modal_price_kg') is None:
+                    crop_lines.append(f"- {item['crop']}: high local demand ({item['demand_kg']:.0f}kg)")
+                else:
+                    crop_lines.append(
+                        f"- {item['crop']}: demand {item['demand_kg']:.0f}kg, mandi ~₹{item['modal_price_kg']:.0f}/kg"
+                    )
+            recommendations_block = '\n'.join(crop_lines)
+        else:
+            recommendations_block = '- No strong crop candidate found yet. Collect 2-3 days of more order/market data.'
         
         return (
             f"🌱 Crop suggestion for {state}:\n"
             f"Nearby buyer demand (last 30 days): {demand_text}\n"
-            f"Top mandi prices today: {market_text}\n\n"
-            "📋 Planning steps:\n"
-            "1. Shortlist 2–3 crops with BOTH strong demand AND high mandi prices.\n"
-            "2. Split your acreage across crops to reduce risk.\n"
-            "3. Check tomorrow's weather forecast in Market Intelligence.\n"
-            "4. Review seasonal disease/pest patterns for these crops.\n"
-            "5. Once selected, add listings in app to reach nearby buyers.\n\n"
-            "💡 Next: Go to Market Intelligence to compare crops side-by-side before final decision."
+            f"Top mandi prices today: {market_text}\n"
+            f"Weather tomorrow: {weather_condition} | Signal: {weather_action}\n\n"
+            "📌 Best crop candidates (demand + mandi + weather):\n"
+            f"{recommendations_block}\n\n"
+            f"🌦 Weather note: {weather_reason}\n\n"
+            "📋 Next steps:\n"
+            "1. Prioritize top 2 crops from the list above.\n"
+            "2. Split acreage between the top crops to reduce risk.\n"
+            "3. Set listing price near mandi modal and adjust based on tomorrow weather signal.\n"
+            "4. Track buyer demand weekly and update crop mix accordingly."
         )
 
     # Negotiation questions
@@ -291,7 +419,14 @@ def _build_contextual_fallback(message, context_block):
 
 def _call_openai(messages):
     api_key = getattr(settings, 'OPENAI_API_KEY', '')
-    model = getattr(settings, 'OPENAI_MODEL', 'gpt-4.1-mini')
+    model = str(getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini') or 'gpt-4o-mini').strip().lower()
+    model_aliases = {
+        'gpt40mini': 'gpt-4o-mini',
+        'gpt-40-mini': 'gpt-4o-mini',
+        'gpt 4o mini': 'gpt-4o-mini',
+        'gpt4omini': 'gpt-4o-mini',
+    }
+    model = model_aliases.get(model, model)
     if not api_key:
         return None
 
@@ -343,15 +478,18 @@ def generate_farmer_ai_reply(user, message, history=None):
         demand = []
 
     try:
-        market = _summarize_market_prices(farmer_state) if farmer_state else []
+        market = _summarize_market_prices_with_fetch(farmer_state) if farmer_state else []
     except Exception:
         market = []
+
+    trending = _build_trending_recommendations(demand=demand, market=market, weather=weather)
 
     context_block = {
         'farmer_location': {'city': farmer_city, 'state': farmer_state},
         'tomorrow_weather': weather,
         'nearby_demand_last_30_days_kg': demand,
         'state_market_prices_today': market,
+        'trending_crops': trending,
         'app_sections': ['Dashboard', 'Market Intelligence', 'Orders & Logistics', 'Listings', 'Negotiations'],
     }
 

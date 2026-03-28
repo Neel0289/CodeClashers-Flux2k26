@@ -9,6 +9,8 @@ from apps.users.models import BuyerProfile, FarmerProfile, LogisticsProfile, Use
 
 
 INDIAN_VEHICLE_NUMBER_REGEX = re.compile(r'^(?:[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{4}|\d{2}\s?BH\s?\d{4}\s?[A-Z]{1,2})$')
+INDIAN_BANK_ACCOUNT_NUMBER_REGEX = re.compile(r'^\d{9,18}$')
+INDIAN_IFSC_REGEX = re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$')
 
 
 def build_unique_username(email: str) -> str:
@@ -98,6 +100,8 @@ class RegisterSerializer(serializers.Serializer):
     max_weight_capacity = serializers.FloatField(required=False)
     operating_states = serializers.ListField(child=serializers.CharField(), required=False)
     vehicles = serializers.JSONField(required=False)
+    bank_account_number = serializers.CharField(required=False, allow_blank=True)
+    bank_ifsc = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         attrs['email'] = attrs['email'].strip().lower()
@@ -105,6 +109,27 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({'email': 'An account with this email already exists.'})
 
         role = attrs['role']
+
+        bank_account_number = str(attrs.get('bank_account_number', '') or '').strip()
+        bank_ifsc = str(attrs.get('bank_ifsc', '') or '').strip().upper()
+
+        if not INDIAN_BANK_ACCOUNT_NUMBER_REGEX.match(bank_account_number):
+            raise serializers.ValidationError({'bank_account_number': 'Enter a valid Indian bank account number (9 to 18 digits).'})
+
+        if len(bank_ifsc) != 11:
+            raise serializers.ValidationError({'bank_ifsc': 'IFSC code must be exactly 11 characters.'})
+
+        if not re.match(r'^[A-Z]{4}', bank_ifsc):
+            raise serializers.ValidationError({'bank_ifsc': 'IFSC code must start with 4 alphabetic characters (e.g., SBIN).'})
+
+        if bank_ifsc[4] != '0':
+            raise serializers.ValidationError({'bank_ifsc': 'The 5th character in IFSC code must be 0.'})
+
+        if not INDIAN_IFSC_REGEX.match(bank_ifsc):
+            raise serializers.ValidationError({'bank_ifsc': 'Enter a valid IFSC code (format: ABCD0XXXXXX).'})
+
+        attrs['bank_account_number'] = bank_account_number
+        attrs['bank_ifsc'] = bank_ifsc
 
         if role == 'logistics':
             vehicles = attrs.get('vehicles')
