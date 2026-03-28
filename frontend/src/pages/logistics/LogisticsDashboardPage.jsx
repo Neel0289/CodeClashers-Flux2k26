@@ -12,7 +12,7 @@ import { CircleMarker, MapContainer, Polyline, TileLayer, useMapEvents } from 'r
 import { Bar, Doughnut } from 'react-chartjs-2'
 import { useNavigate } from 'react-router-dom'
 
-import { getLogisticsRequests, quoteRequest } from '../../api/logistics'
+import { getLogisticsRequests, pickupRequest, quoteRequest } from '../../api/logistics'
 import Button from '../../components/shared/Button'
 import Card from '../../components/shared/Card'
 import PageShell from '../../components/shared/PageShell'
@@ -35,6 +35,9 @@ function RouteMapPicker({ onPick }) {
 }
 
 function formatStatus(value) {
+  if (String(value || '') === 'picked_up') {
+    return 'Shipped'
+  }
   return String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
@@ -449,6 +452,21 @@ export default function LogisticsDashboardPage() {
     }
   }
 
+  const handleMarkShipped = async (requestId) => {
+    setRequestError('')
+    setRequestMessage('')
+    setRequestActionLoadingId(requestId)
+    try {
+      const { data } = await pickupRequest(requestId)
+      setRequests((prev) => prev.map((item) => (item.id === requestId ? data : item)))
+      setRequestMessage('Shipment status updated. Buyer and farmer can now see this order as shipped.')
+    } catch (err) {
+      setRequestError(err?.response?.data?.detail || 'Could not mark this order as shipped.')
+    } finally {
+      setRequestActionLoadingId(null)
+    }
+  }
+
   return (
     <div className="min-h-screen farm-bg pb-12">
       <PageShell
@@ -635,15 +653,15 @@ export default function LogisticsDashboardPage() {
                         : 'border-border bg-white hover:border-emerald-300 hover:shadow-md'
                     }`}
                   >
-                    <div className="p-5">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-2xl ${Number(selectedRequestId) === Number(request.id) ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-emerald-100 group-hover:text-emerald-600'} transition-colors`}>
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    <div className="p-5 md:p-6">
+                      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${Number(selectedRequestId) === Number(request.id) ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'} transition-colors`}>
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                           </div>
                           <div>
-                            <h3 className="font-black text-text-primary text-lg">Order #{request.order}</h3>
-                            <p className="text-xs text-text-muted font-bold uppercase tracking-widest">{request.product_name || 'Agri Product'}</p>
+                            <h3 className="text-2xl font-black tracking-tight text-text-primary">Order #{request.order}</h3>
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">{request.product_name || 'Agri Product'}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -651,63 +669,77 @@ export default function LogisticsDashboardPage() {
                           <Button
                             variant="clay"
                             onClick={(e) => { e.stopPropagation(); handleGenerateLogisticsInvoice(request); }}
-                            className="text-[10px] py-1.5 px-3 uppercase font-black"
+                            className="rounded-full bg-emerald-700 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
                           >
                             Invoice
                           </Button>
                         </div>
                       </div>
-  
-                      <div className="clay-input rounded-2xl bg-white/60 p-4 border border-emerald-50 mb-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                          <div className="border-r border-emerald-100">
-                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Quantity</p>
-                            <p className="font-bold text-text-primary">{request.order_quantity || request.weight_kg} kg</p>
+
+                      <div className="mb-4 rounded-[20px] border border-white/80 bg-white/70 px-4 py-3 shadow-inner">
+                        <div className="grid grid-cols-2 gap-4 text-center md:grid-cols-4">
+                          <div className="md:border-r md:border-emerald-100">
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-text-muted">Quantity</p>
+                            <p className="text-3xl font-black text-emerald-700 leading-none">{request.order_quantity || request.weight_kg}<span className="ml-1 text-sm font-bold text-text-muted">kg</span></p>
                           </div>
-                          <div className="md:border-r border-emerald-100">
-                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Value</p>
-                            <p className="font-bold text-emerald-700">₹{request.order_agreed_price || '-'}</p>
+                          <div className="md:border-r md:border-emerald-100">
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-text-muted">Value</p>
+                            <p className="text-3xl font-black text-emerald-700 leading-none">₹{request.order_agreed_price || '-'}</p>
                           </div>
-                          <div className="border-r border-emerald-100">
-                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Farmer</p>
-                            <p className="font-bold text-text-primary truncate px-2">{request.farmer_name || '-'}</p>
+                          <div className="md:border-r md:border-emerald-100">
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-text-muted">Farmer</p>
+                            <p className="truncate text-xl font-black text-text-primary">{request.farmer_name || '-'}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] text-text-muted uppercase font-black tracking-tight mb-1">Contact</p>
-                            <p className="font-bold text-text-primary text-xs">{request.farmer_phone || '-'}</p>
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-text-muted">Contact</p>
+                            <p className="text-xl font-black text-text-primary">{request.farmer_phone || '-'}</p>
                           </div>
                         </div>
                       </div>
-  
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-center gap-2 text-sm">
-                          <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full text-slate-700 font-medium">
-                            <span className="text-lg">📍</span> {request.pickup_city}
-                          </div>
-                          <span className="text-text-muted">→</span>
-                          <div className="flex items-center gap-1.5 bg-emerald-100 px-3 py-1.5 rounded-full text-emerald-800 font-medium">
-                            <span className="text-lg">🎯</span> {request.drop_city}
-                          </div>
+
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <div className="rounded-full bg-slate-100 px-4 py-2 font-semibold text-slate-700">📍 {request.pickup_city}</div>
+                          <span className="text-lg font-bold text-text-muted">→</span>
+                          <div className="rounded-full bg-emerald-100 px-4 py-2 font-semibold text-emerald-800">🎯 {request.drop_city}</div>
                         </div>
-  
+
                         {request.status === 'pending' && (
                           <Button
                             variant="clay"
                             disabled={requestActionLoadingId === request.id}
                             onClick={(e) => { e.stopPropagation(); openQuoteModal(request); }}
-                            className="bg-emerald-700 text-white font-bold"
+                            className="rounded-full bg-emerald-700 px-5 py-2.5 text-white font-bold"
                           >
                             {requestActionLoadingId === request.id ? 'Sending...' : 'Send Price Quote'}
                           </Button>
                         )}
                         {request.status === 'quoted' && (
-                          <div className="flex items-center gap-3 bg-amber-50 px-4 py-2 rounded-2xl border border-amber-100">
+                          <div className="flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2">
                             <div className="text-right">
-                              <p className="text-[10px] text-amber-600 uppercase font-black tracking-widest">Our Quote</p>
-                              <p className="font-black text-amber-700">₹{request.quoted_fee || '-'}</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Our Quote</p>
+                              <p className="text-lg font-black text-amber-700">₹{request.quoted_fee || '-'}</p>
                             </div>
-                            <div className="h-8 w-[1px] bg-amber-200"></div>
+                            <div className="h-8 w-px bg-amber-200" />
                             <p className="text-xs font-bold text-amber-600 animate-pulse">Decision Pending</p>
+                          </div>
+                        )}
+                        {request.status === 'accepted' && (
+                          <Button
+                            variant="clay"
+                            disabled={requestActionLoadingId === request.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleMarkShipped(request.id)
+                            }}
+                            className="rounded-full bg-sky-700 px-5 py-2.5 text-white font-bold"
+                          >
+                            {requestActionLoadingId === request.id ? 'Updating...' : 'Mark as Shipped'}
+                          </Button>
+                        )}
+                        {request.status === 'picked_up' && (
+                          <div className="flex items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-700">
+                            <span>🚚</span> Shipment already marked
                           </div>
                         )}
                       </div>

@@ -26,6 +26,9 @@ import MarketIntelligence from './MarketIntelligence'
 const DEMO_REVIEWS_STORAGE_KEY = 'khetbazaar_demo_reviews'
 
 function formatStatus(value) {
+  if (String(value || '') === 'picked_up') {
+    return 'Shipped'
+  }
   return String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
@@ -699,7 +702,7 @@ export default function FarmerDashboardPage() {
   const stats = useMemo(() => {
     const activeListings = products.filter((p) => p.is_available).length
     const openNegotiations = negotiations.filter((n) => ['open', 'countered'].includes(n.status)).length
-    const pendingLogistics = orders.filter((o) => !['shipped', 'delivered', 'completed'].includes(o.status)).length
+    const pendingLogistics = orders.filter((o) => !['picked_up', 'shipped', 'delivered', 'completed'].includes(o.status)).length
     const earnings = orders
       .filter((o) => o.status === 'completed')
       .reduce((sum, o) => sum + (Number(o.agreed_price) || 0), 0)

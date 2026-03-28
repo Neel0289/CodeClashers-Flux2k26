@@ -87,6 +87,9 @@ async function geocodeLocation(query) {
 }
 
 function formatStatus(value) {
+  if (String(value || '') === 'picked_up') {
+    return 'Shipped'
+  }
   return String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
@@ -884,7 +887,7 @@ export default function BuyerDashboardPage() {
                       order.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
                       'bg-amber-100 text-amber-700'
                     }`}>
-                      {order.status}
+                      {formatStatus(order.status)}
                     </span>
                   </div>
 

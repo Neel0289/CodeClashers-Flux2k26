@@ -218,6 +218,10 @@ class LogisticsRequestPickupAPIView(APIView):
 		req = LogisticsRequest.objects.get(pk=pk)
 		if request.user.id != req.logistics_partner_id:
 			raise PermissionDenied('Not allowed.')
+		if req.status == 'picked_up':
+			return Response({'detail': 'Shipment is already marked as shipped.'}, status=status.HTTP_400_BAD_REQUEST)
+		if req.status != 'accepted':
+			return Response({'detail': 'You can mark shipped only after farmer confirmation.'}, status=status.HTTP_400_BAD_REQUEST)
 		req.status = 'picked_up'
 		req.save(update_fields=['status'])
 		req.order.status = 'picked_up'

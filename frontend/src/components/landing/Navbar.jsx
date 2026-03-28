@@ -24,7 +24,7 @@ export default function Navbar() {
         <Link to="/" className="flex items-center gap-2 font-display text-2xl"><Leaf />KhetBazar</Link>
         <div className="hidden items-center gap-6 md:flex">
           {links.map((link) => <a key={link.label} className="text-sm text-text-muted hover:text-accent transition-colors" href={link.href}>{link.label}</a>)}
-          <Link to="/login"><Button className="border border-border bg-transparent text-brown hover:bg-surface-2 hover:text-brown">Login</Button></Link>
+          <Link to="/login"><Button className="border border-border bg-white/70 text-black hover:bg-white hover:text-black">Login</Button></Link>
           <Link to="/register"><Button>Get Started</Button></Link>
         </div>
         <button className="md:hidden" onClick={() => setMobileOpen((v) => !v)}><Menu /></button>

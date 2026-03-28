@@ -84,7 +84,7 @@ export default function LoginPage() {
     <main className="min-h-screen farm-bg px-4 py-10">
       <div className="mx-auto flex min-h-[80vh] w-full max-w-4xl items-center justify-center">
         <div className="w-full max-w-2xl rounded-[36px] border border-white/70 bg-white/60 p-6 shadow-[0_32px_80px_-28px_rgba(15,23,42,0.6)] backdrop-blur-2xl sm:p-8">
-          <h1 className="mb-2 text-center font-display text-5xl text-text-primary">Login</h1>
+          <h1 className="mb-2 text-center font-display text-5xl text-black">Login</h1>
           <p className="mb-8 text-center text-lg font-medium italic text-text-muted">Connecting Bharat's Farmers directly to the Market.</p>
 
       {/* ── Step 1: Are you a farmer? ─────────────────────────── */}
@@ -180,7 +180,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Button variant="clay" className="bg-accent-bright text-bg py-4 text-lg font-black shadow-lg shadow-accent/20 active:translate-y-0.5" type="submit">LOGIN</Button>
+          <Button variant="clay" className="bg-accent-bright text-black py-4 text-lg font-black shadow-lg shadow-accent/20 active:translate-y-0.5" type="submit">LOGIN</Button>
 
           <p className="text-center text-xs text-text-muted mt-2">
             Forgot password? <a href="#" className="text-accent underline">Reset it</a>
