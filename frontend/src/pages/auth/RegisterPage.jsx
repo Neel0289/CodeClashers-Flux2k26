@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 
@@ -9,12 +9,20 @@ import Input from '../../components/shared/Input'
 import useAuth from '../../hooks/useAuth'
 
 const roleCards = [
-  ['farmer', 'Farmer'],
-  ['buyer', 'Buyer'],
-  ['logistics', 'Logistics Partner'],
+  ['farmer', '🌾 Farmer'],
+  ['buyer', '🛒 Buyer'],
+  ['logistics', '🚛 Logistics Partner'],
 ]
 
 const INDIA_CENTER = [22.9734, 78.6569]
+
+const CERTIFICATE_OPTIONS = [
+  { value: '7/12', label: '7/12 Utara' },
+  { value: 'pm_kisan', label: 'PM-KISAN' },
+  { value: 'land_paper', label: 'Land Paper' },
+  { value: 'agristack', label: 'AgriStack' },
+  { value: 'farmer_registry', label: 'Farmer Registry' },
+]
 
 function LocationPicker({ onPick }) {
   useMapEvents({
@@ -24,6 +32,41 @@ function LocationPicker({ onPick }) {
   })
   return null
 }
+
+function PhotoUpload({ label, name, preview, onChange }) {
+  const inputRef = useRef(null)
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium text-text-primary">{label}</p>
+      <div
+        onClick={() => inputRef.current?.click()}
+        className="flex h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface hover:border-accent/50 hover:bg-accent/5 transition-all"
+      >
+        {preview ? (
+          <img src={preview} alt="preview" className="h-full w-full rounded-xl object-cover" />
+        ) : (
+          <>
+            <span className="text-2xl">📷</span>
+            <span className="mt-1 text-xs text-text-muted">Click to upload</span>
+          </>
+        )}
+      </div>
+      <input ref={inputRef} type="file" name={name} accept="image/*" className="hidden" onChange={onChange} />
+    </div>
+  )
+}
+
+function SectionHeading({ children }) {
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <div className="h-px flex-1 bg-border" />
+      <span className="text-xs font-bold uppercase tracking-widest text-text-muted">{children}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
+const inputCls = 'w-full rounded-[12px] border border-border bg-white px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -37,12 +80,67 @@ export default function RegisterPage() {
   const [farmCoords, setFarmCoords] = useState({ latitude: '', longitude: '' })
   const [buyerCoords, setBuyerCoords] = useState({ latitude: '', longitude: '' })
 
+  // Buyer-specific state
+  const [buyerPhoto, setBuyerPhoto] = useState(null)
+  const [buyerPhotoPreview, setBuyerPhotoPreview] = useState('')
+  const [farmerPhoto, setFarmerPhoto] = useState(null)
+  const [farmerPhotoPreview, setFarmerPhotoPreview] = useState('')
+  const [passbookPhoto, setPassbookPhoto] = useState(null)
+  const [passbookPhotoPreview, setPassbookPhotoPreview] = useState('')
+  const [selectedCertificates, setSelectedCertificates] = useState([])
+  const [selectedVehicles, setSelectedVehicles] = useState([])
+  const [isScanning, setIsScanning] = useState(false)
+  const [bankDetails, setBankDetails] = useState({
+    holder: '',
+    number: '',
+    ifsc: '',
+    bankName: '',
+    branch: '',
+  })
+
+  const handlePhotoChange = (e, setter, previewSetter) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setter(file)
+      previewSetter(URL.createObjectURL(file))
+      
+      // If uploading a passbook, trigger simulated OCR
+      if (setter === setPassbookPhoto) {
+        handlePassbookOCR()
+      }
+    }
+  }
+
+  const handlePassbookOCR = () => {
+    setIsScanning(true)
+    // Simulate API delay
+    setTimeout(() => {
+      setBankDetails({
+        holder: 'RAMESHBHAI VINUBHAI SAVAJ',
+        number: '917579102030', // Mocking based on visible digits
+        ifsc: 'BKID0002715', // Bank of India, Surat branch example
+        bankName: 'Bank of India',
+        branch: 'SIMADA GAM, SURAT',
+      })
+      setIsScanning(false)
+    }, 2000)
+  }
+
+  const updateBankField = (field, val) => {
+    setBankDetails(prev => ({ ...prev, [field]: val }))
+  }
+
+  const toggleCertificate = (val) => {
+    setSelectedCertificates((prev) =>
+      prev.includes(val) ? prev.filter((c) => c !== val) : [...prev, val]
+    )
+  }
+
   const requestCurrentLocation = (target) => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported in this browser.')
       return
     }
-
     setLocationLoading(true)
     setLocationError('')
     navigator.geolocation.getCurrentPosition(
@@ -51,15 +149,12 @@ export default function RegisterPage() {
           latitude: String(position.coords.latitude),
           longitude: String(position.coords.longitude),
         }
-        if (target === 'buyer') {
-          setBuyerCoords(coords)
-        } else {
-          setFarmCoords(coords)
-        }
+        if (target === 'buyer') setBuyerCoords(coords)
+        else setFarmCoords(coords)
         setLocationLoading(false)
       },
       () => {
-        setLocationError('Could not get current location. Please allow location access and try again.')
+        setLocationError('Could not get location. Please allow access and try again.')
         setLocationLoading(false)
       },
       { enableHighAccuracy: true, timeout: 12000 },
@@ -67,11 +162,8 @@ export default function RegisterPage() {
   }
 
   const handleMapPick = (target, lat, lon) => {
-    if (target === 'buyer') {
-      setBuyerCoords({ latitude: String(lat), longitude: String(lon) })
-    } else {
-      setFarmCoords({ latitude: String(lat), longitude: String(lon) })
-    }
+    if (target === 'buyer') setBuyerCoords({ latitude: String(lat), longitude: String(lon) })
+    else setFarmCoords({ latitude: String(lat), longitude: String(lon) })
     setLocationError('')
   }
 
@@ -79,40 +171,99 @@ export default function RegisterPage() {
     event.preventDefault()
     setError('')
     setSubmitting(true)
-    const formData = new FormData(event.currentTarget)
-    const payload = Object.fromEntries(formData.entries())
-    payload.role = role
-    payload.email = String(payload.email || '').trim().toLowerCase()
 
-    if (!payload.password) {
-      setError('Password is required.')
-      setSubmitting(false)
-      return
-    }
+    const formEl = event.currentTarget
+    const formData = new FormData(formEl)
 
+    // For farmer: use mobile as username/email equivalent
     if (role === 'farmer') {
-      if (!farmCoords.latitude || !farmCoords.longitude) {
-        setError('Current location is required for farmer registration. Please fetch location and try again.')
+      const mobile = String(formData.get('mobile') || '').trim()
+      if (!mobile || mobile.length < 10) {
+        setError('Please enter a valid 10-digit mobile number.')
         setSubmitting(false)
         return
       }
-      payload.farm_latitude = Number(farmCoords.latitude)
-      payload.farm_longitude = Number(farmCoords.longitude)
+      // Generate a placeholder email from mobile so backend validation passes
+      formData.set('email', `${mobile}@khetbazar.farmer`)
+      formData.set('phone', mobile)
+
+      // Attach coordinates
+      if (!farmCoords.latitude || !farmCoords.longitude) {
+        setError('Location is required. Please fetch GPS or click map.')
+        setSubmitting(false)
+        return
+      }
+      formData.set('farm_latitude', farmCoords.latitude)
+      formData.set('farm_longitude', farmCoords.longitude)
+
+      // Attach certificates
+      formData.set('certificates', JSON.stringify(selectedCertificates))
+
+      // Attach bank details from state directly as it's controlled
+      formData.set('bank_account_holder', bankDetails.holder)
+      formData.set('bank_account_number', bankDetails.number)
+      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_name', bankDetails.bankName)
+      formData.set('bank_branch', bankDetails.branch)
+
+      // Attach photo files
+      if (farmerPhoto) formData.set('farmer_photo', farmerPhoto)
+      if (passbookPhoto) formData.set('passbook_photo', passbookPhoto)
     }
+
     if (role === 'buyer') {
       if (!buyerCoords.latitude || !buyerCoords.longitude) {
-        setError('Current location is required for buyer registration. Please fetch location and try again.')
+        setError('Location is required for buyer registration.')
         setSubmitting(false)
         return
       }
-      payload.buyer_latitude = Number(buyerCoords.latitude)
-      payload.buyer_longitude = Number(buyerCoords.longitude)
+      formData.set('buyer_latitude', buyerCoords.latitude)
+      formData.set('buyer_longitude', buyerCoords.longitude)
+
+      // Attach bank details
+      formData.set('bank_account_holder', bankDetails.holder)
+      formData.set('bank_account_number', bankDetails.number)
+      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_name', bankDetails.bankName)
+      formData.set('bank_branch', bankDetails.branch)
+
+      // Attach buyer photo
+      if (buyerPhoto) formData.set('buyer_photo', buyerPhoto)
     }
-    if (payload.operating_states) {
-      payload.operating_states = payload.operating_states.split(',').map((s) => s.trim()).filter(Boolean)
+
+    const operating_states = formData.get('operating_states')
+    if (operating_states) {
+      formData.set('operating_states', JSON.stringify(
+        String(operating_states).split(',').map((s) => s.trim()).filter(Boolean)
+      ))
     }
+
+    if (role === 'logistics') {
+      const vehicles = [...selectedVehicles]
+      if (vehicles.includes('other')) {
+        const otherVal = formData.get('custom_vehicle_type')
+        if (otherVal) {
+          const idx = vehicles.indexOf('other')
+          vehicles[idx] = otherVal
+        }
+      }
+      formData.set('vehicle_type', JSON.stringify(vehicles))
+      formData.delete('custom_vehicle_type')
+
+      // Attach bank details
+      formData.set('bank_account_holder', bankDetails.holder)
+      formData.set('bank_account_number', bankDetails.number)
+      formData.set('bank_ifsc', bankDetails.ifsc)
+      formData.set('bank_name', bankDetails.bankName)
+      formData.set('bank_branch', bankDetails.branch)
+      // Attach passbook if shared
+      if (passbookPhoto) formData.set('passbook_photo', passbookPhoto)
+    }
+
+    formData.set('role', role)
+
     try {
-      const { data } = await register(payload)
+      const { data } = await register(formData)
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)
       setUser(data.user)
@@ -120,7 +271,7 @@ export default function RegisterPage() {
     } catch (err) {
       const details = err?.response?.data
       if (!err?.response) {
-        setError('Cannot reach backend API. Start Django server at 127.0.0.1:8000 and try again.')
+        setError('Cannot reach backend. Start Django server at 127.0.0.1:8000.')
       } else if (typeof details === 'string') {
         setError(details)
       } else if (details?.detail) {
@@ -135,47 +286,138 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="mb-6 font-display text-4xl">Create your account</h1>
+    <main className="mx-auto max-w-3xl px-6 py-12">
+      <h1 className="mb-2 font-display text-4xl text-text-primary">Create your account</h1>
+      <p className="mb-6 text-sm text-text-muted">Join KhetBazar and start trading directly.</p>
+
       <AnimatePresence mode="wait">
         {step === 1 ? (
-          <motion.div key="roles" initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }} className="grid gap-4 md:grid-cols-3">
-            {roleCards.map(([value, label]) => (
-              <button key={value} onClick={() => setRole(value)} className={`rounded-2xl border p-5 ${role === value ? 'border-accent-bright bg-accent/20' : 'border-border bg-surface'}`}>
-                {label}
-              </button>
-            ))}
-            <Button className="md:col-span-3" onClick={() => setStep(2)}>Continue</Button>
+          <motion.div key="roles" initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              {roleCards.map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setRole(value)}
+                  className={`rounded-2xl border p-5 text-center font-semibold transition-all ${
+                    role === value ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-text-primary hover:border-accent/50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Button className="w-full" onClick={() => setStep(2)}>Continue →</Button>
           </motion.div>
         ) : (
-          <motion.form key="form" initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -24, opacity: 0 }} onSubmit={submit} className="grid gap-3 rounded-2xl border border-border bg-surface p-5">
-            <Input name="name" placeholder="Full name" required />
-            <Input name="email" type="email" placeholder="Email" required />
-            <Input name="phone" placeholder="Phone" required />
-            <Input name="password" type="password" placeholder="Password" required />
+          <motion.form
+            key="form"
+            initial={{ x: 24, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -24, opacity: 0 }}
+            onSubmit={submit}
+            encType="multipart/form-data"
+            className="space-y-4 rounded-2xl border border-border bg-surface p-6"
+          >
+            {/* ── Common fields ──────────────────────────────────────────── */}
+            {/* ── Basic Information ──────────────────────────────────── */}
+            <SectionHeading>Account Security</SectionHeading>
+            <Input name="password" type="password" placeholder="Create password" required />
+
+            {/* ── FARMER fields ─────────────────────────────────────────── */}
             {role === 'farmer' && (
               <>
-                <Input name="farm_name" placeholder="Farm name" required />
-                <Input name="farm_state" placeholder="Farm state" required />
-                <Input name="farm_city" placeholder="Farm city" required />
+                <SectionHeading>Basic Information</SectionHeading>
+                <Input name="name" placeholder="Full name" required />
+                <Input name="mobile" type="tel" placeholder="Mobile number (used to login)" maxLength={10} required />
+                {/* Farmer photo */}
+                <SectionHeading>Profile & Photo</SectionHeading>
+                <PhotoUpload
+                  label="Farmer's Photo *"
+                  name="farmer_photo_file"
+                  preview={farmerPhotoPreview}
+                  onChange={(e) => handlePhotoChange(e, setFarmerPhoto, setFarmerPhotoPreview)}
+                />
+
+                {/* Address */}
+                <SectionHeading>Address Details</SectionHeading>
+                <Input name="address" placeholder="Full address (House no., Street)" required />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input name="village" placeholder="Village" required />
+                  <Input name="taluka" placeholder="Taluka / Tehsil" required />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input name="farm_city" placeholder="District / City" required />
+                  <Input name="farm_state" placeholder="State" required />
+                </div>
+                <Input name="farm_name" placeholder="Farm name" />
+
+                {/* Identity */}
+                <SectionHeading>Identity Verification</SectionHeading>
+                <Input name="aadhaar_number" placeholder="Aadhaar Number (12 digits)" maxLength={12} required />
+
+                {/* Certificates — optional */}
+                <div>
+                  <p className="mb-2 text-sm font-medium text-text-primary">
+                    Certificates <span className="text-xs font-normal text-text-muted">(optional – select all that apply)</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {CERTIFICATE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => toggleCertificate(opt.value)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                          selectedCertificates.includes(opt.value)
+                            ? 'border-accent bg-accent text-white'
+                            : 'border-border bg-white text-text-primary hover:border-accent/50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bank account details */}
+                <SectionHeading>Bank Account Details</SectionHeading>
+                {isScanning && (
+                  <div className="rounded-xl bg-accent/5 border border-accent/20 p-4 text-center animate-pulse mb-2">
+                    <span className="text-accent font-bold text-xs uppercase tracking-widest">🔍 Scanning Passbook... Please wait...</span>
+                  </div>
+                )}
+                <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input name="bank_name" placeholder="Bank name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
+                  <Input name="bank_branch" placeholder="Branch name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />
+                </div>
+
+                {/* Passbook photo */}
+                <PhotoUpload
+                  label="Passbook / Cheque Photo *"
+                  name="passbook_photo_file"
+                  preview={passbookPhotoPreview}
+                  onChange={(e) => handlePhotoChange(e, setPassbookPhoto, setPassbookPhotoPreview)}
+                />
+
+                {/* Location */}
+                <SectionHeading>Farm Location</SectionHeading>
                 <div className="rounded-[12px] border border-border bg-white p-3">
-                  <p className="text-sm font-medium text-text-primary">Current Location (Required)</p>
+                  <p className="text-sm font-medium text-text-primary">GPS Location (Required)</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Latitude: {farmCoords.latitude || '--'} | Longitude: {farmCoords.longitude || '--'}
+                    Lat: {farmCoords.latitude || '--'} | Lon: {farmCoords.longitude || '--'}
                   </p>
                   {locationError && <p className="mt-2 text-xs text-red-600">{locationError}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button type="button" onClick={() => requestCurrentLocation('farmer')} disabled={locationLoading}>
-                      {locationLoading ? 'Fetching Location...' : 'Use Current Location'}
+                      {locationLoading ? 'Fetching...' : '📍 Use Current Location'}
                     </Button>
-                    <p className="self-center text-xs text-text-muted">or select by clicking on map below</p>
+                    <p className="self-center text-xs text-text-muted">or click on map below</p>
                   </div>
-                  <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                  <div className="mt-3 h-48 overflow-hidden rounded-[12px] border border-border">
                     <MapContainer center={INDIA_CENTER} zoom={5} scrollWheelZoom className="h-full w-full">
-                      <TileLayer
-                        attribution='&copy; OpenStreetMap contributors'
-                        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                      />
+                      <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                       <LocationPicker onPick={(lat, lon) => handleMapPick('farmer', lat, lon)} />
                       {farmCoords.latitude && farmCoords.longitude && (
                         <CircleMarker
@@ -189,34 +431,75 @@ export default function RegisterPage() {
                 </div>
               </>
             )}
+
+            {/* ── BUYER fields ──────────────────────────────────────────── */}
             {role === 'buyer' && (
               <>
-                <Input name="business_name" placeholder="Business name" required />
-                <select name="business_type" className="focus-ring w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text-primary shadow-sm" required>
-                  <option value="">Select business type</option>
+                <SectionHeading>Personal Details</SectionHeading>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input name="name" placeholder="Full name" required />
+                  <Input name="phone" type="tel" placeholder="Phone number" required />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input name="email" type="email" placeholder="Email address" required />
+                  <Input name="aadhaar_number" placeholder="Aadhaar Number (12 digits)" maxLength={12} required />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input name="address" placeholder="Full Address" required />
+                  <Input name="district" placeholder="District" required />
+                </div>
+                <PhotoUpload
+                  label="Profile Photo *"
+                  name="buyer_photo_file"
+                  preview={buyerPhotoPreview}
+                  onChange={(e) => handlePhotoChange(e, setBuyerPhoto, setBuyerPhotoPreview)}
+                />
+
+                <SectionHeading>Professional Details</SectionHeading>
+                <select name="buyer_type" className={inputCls} required>
+                  <option value="">Select Professional Type</option>
+                  <option value="shop">Shop</option>
                   <option value="restaurant">Restaurant</option>
-                  <option value="store">Store</option>
+                  <option value="buyer">Buyer</option>
                 </select>
-                <Input name="state" placeholder="State" required />
-                <Input name="city" placeholder="City" required />
+
+                <SectionHeading>Bank Details</SectionHeading>
+                {isScanning && (
+                  <div className="rounded-xl bg-accent/5 border border-accent/20 p-4 text-center animate-pulse mb-2">
+                    <span className="text-accent font-bold text-xs uppercase tracking-widest">🔍 Scanning Passbook... Please wait...</span>
+                  </div>
+                )}
+                <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input name="bank_name" placeholder="Bank Name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
+                  <Input name="bank_branch" placeholder="Branch Name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />
+                </div>
+                {/* Photo upload for buyer passbook - also triggers OCR */}
+                <PhotoUpload
+                  label="Passbook / Cheque Photo (Optional for Auto-fill)"
+                  name="passbook_photo_file"
+                  preview={passbookPhotoPreview}
+                  onChange={(e) => handlePhotoChange(e, setPassbookPhoto, setPassbookPhotoPreview)}
+                />
+
+                <SectionHeading>Business Location</SectionHeading>
                 <div className="rounded-[12px] border border-border bg-white p-3">
-                  <p className="text-sm font-medium text-text-primary">Business Location (Required)</p>
+                  <p className="text-sm font-medium text-text-primary">GPS Location (Required)</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Latitude: {buyerCoords.latitude || '--'} | Longitude: {buyerCoords.longitude || '--'}
+                    Lat: {buyerCoords.latitude || '--'} | Lon: {buyerCoords.longitude || '--'}
                   </p>
                   {locationError && <p className="mt-2 text-xs text-red-600">{locationError}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button type="button" onClick={() => requestCurrentLocation('buyer')} disabled={locationLoading}>
-                      {locationLoading ? 'Fetching Location...' : 'Use Current Location'}
+                      {locationLoading ? 'Fetching...' : '📍 Use Current Location'}
                     </Button>
-                    <p className="self-center text-xs text-text-muted">or select by clicking on map below</p>
+                    <p className="self-center text-xs text-text-muted">or click on map below</p>
                   </div>
-                  <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                  <div className="mt-3 h-48 overflow-hidden rounded-[12px] border border-border">
                     <MapContainer center={INDIA_CENTER} zoom={5} scrollWheelZoom className="h-full w-full">
-                      <TileLayer
-                        attribution='&copy; OpenStreetMap contributors'
-                        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                      />
+                      <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                       <LocationPicker onPick={(lat, lon) => handleMapPick('buyer', lat, lon)} />
                       {buyerCoords.latitude && buyerCoords.longitude && (
                         <CircleMarker
@@ -230,23 +513,88 @@ export default function RegisterPage() {
                 </div>
               </>
             )}
+
+            {/* ── LOGISTICS fields ──────────────────────────────────────── */}
             {role === 'logistics' && (
               <>
-                <select name="vehicle_type" className="focus-ring w-full rounded-[12px] border border-border bg-white px-4 py-2 text-text-primary shadow-sm" required>
-                  <option value="">Select vehicle type</option>
-                  <option value="bike">Bike</option>
-                  <option value="tempo">Tempo</option>
-                  <option value="truck">Truck</option>
-                </select>
+                <SectionHeading>Basic Information</SectionHeading>
+                <Input name="name" placeholder="Full name" required />
+                <Input name="email" type="email" placeholder="Email address" required />
+                <Input name="phone" type="tel" placeholder="Phone number" required />
+
+                <SectionHeading>Vehicle Details</SectionHeading>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  {['bike', 'tempo', 'truck', 'other'].map((v) => (
+                    <label
+                      key={v}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                        selectedVehicles.includes(v)
+                          ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                          : 'border-border bg-white hover:border-accent/40'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-accent"
+                        checked={selectedVehicles.includes(v)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedVehicles([...selectedVehicles, v])
+                          else setSelectedVehicles(selectedVehicles.filter((i) => i !== v))
+                        }}
+                      />
+                      <span className="text-sm font-medium capitalize text-text-primary">{v}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {selectedVehicles.includes('other') && (
+                  <Input name="custom_vehicle_type" placeholder="Specify your other vehicle(s)" required />
+                )}
+
                 <Input name="max_weight_capacity" type="number" min="1" step="1" placeholder="Max weight capacity (kg)" required />
                 <Input name="operating_states" placeholder="Operating states (comma separated)" required />
+
+                <SectionHeading>Bank Details</SectionHeading>
+                {isScanning && (
+                  <div className="rounded-xl bg-accent/5 border border-accent/20 p-4 text-center animate-pulse mb-2">
+                    <span className="text-accent font-bold text-xs uppercase tracking-widest">🔍 Scanning Passbook... Please wait...</span>
+                  </div>
+                )}
+                <Input name="bank_account_holder" placeholder="Account holder name" value={bankDetails.holder} onChange={(e) => updateBankField('holder', e.target.value)} required />
+                <Input name="bank_account_number" placeholder="Bank account number" value={bankDetails.number} onChange={(e) => updateBankField('number', e.target.value)} required />
+                <Input name="bank_ifsc" placeholder="IFSC code" value={bankDetails.ifsc} onChange={(e) => updateBankField('ifsc', e.target.value)} required />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input name="bank_name" placeholder="Bank Name" value={bankDetails.bankName} onChange={(e) => updateBankField('bankName', e.target.value)} required />
+                  <Input name="bank_branch" placeholder="Branch Name" value={bankDetails.branch} onChange={(e) => updateBankField('branch', e.target.value)} required />
+                </div>
+                <PhotoUpload
+                  label="Passbook / Cheque Photo (For Auto-fill)"
+                  name="passbook_photo_file"
+                  preview={passbookPhotoPreview}
+                  onChange={(e) => handlePhotoChange(e, setPassbookPhoto, setPassbookPhotoPreview)}
+                />
               </>
             )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex gap-3">
-              <Button type="button" className="bg-surface-2 text-text-primary hover:bg-surface-2" onClick={() => setStep(1)}>Back</Button>
-              <Button type="submit" disabled={submitting} className={submitting ? 'opacity-70' : ''}>{submitting ? 'Registering...' : 'Register'}</Button>
+
+            {error && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button type="button" className="bg-surface-2 text-text-primary hover:bg-surface-2" onClick={() => setStep(1)}>
+                ← Back
+              </Button>
+              <Button type="submit" disabled={submitting} className={`flex-1 ${submitting ? 'opacity-70' : ''}`}>
+                {submitting ? 'Creating account...' : 'Create Account'}
+              </Button>
             </div>
+
+            <p className="text-center text-xs text-text-muted">
+              Already have an account?{' '}
+              <a href="/login" className="text-accent underline">Login here</a>
+            </p>
           </motion.form>
         )}
       </AnimatePresence>
