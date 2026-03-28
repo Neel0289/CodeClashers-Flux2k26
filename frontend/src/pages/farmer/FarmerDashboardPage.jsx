@@ -8,15 +8,18 @@ import { getOrders, setOrderLocations } from '../../api/orders'
 import { createLogisticsCheckout, verifyLogisticsCheckout } from '../../api/payments'
 import { createProduct, updateProduct, deleteProduct, getProducts } from '../../api/products'
 import { getReviews } from '../../api/reviews'
+import { createSellFastAlert } from '../../api/alerts'
 import AddProductModal from '../../components/farmer/AddProductModal'
 import FarmerAIAssistant from '../../components/farmer/FarmerAIAssistant'
 import FarmerInsightsCharts from '../../components/farmer/FarmerInsightsCharts'
 import EditProductModal from '../../components/farmer/EditProductModal'
 import Button from '../../components/shared/Button'
+import BuyerFarmerChatWidget from '../../components/shared/BuyerFarmerChatWidget'
 import Card from '../../components/shared/Card'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
 import useAuth from '../../hooks/useAuth'
+import { openInvoiceWindow } from '../../utils/invoice'
 import MarketIntelligence from './MarketIntelligence'
 
 const DEMO_REVIEWS_STORAGE_KEY = 'khetbazaar_demo_reviews'
@@ -132,6 +135,16 @@ export default function FarmerDashboardPage() {
   const [mapPreviewLoading, setMapPreviewLoading] = useState(false)
   const [requestingOrderId, setRequestingOrderId] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [isSellFastModalOpen, setIsSellFastModalOpen] = useState(false)
+  const [sellFastLoading, setSellFastLoading] = useState(false)
+  const [sellFastError, setSellFastError] = useState('')
+  const [sellFastSuccess, setSellFastSuccess] = useState('')
+  const [sellFastForm, setSellFastForm] = useState({
+    productId: '',
+    quantityKg: '',
+    pricePerKg: '',
+    note: '',
+  })
   const partnersSectionRef = useRef(null)
   const celebratedPaidOrdersRef = useRef(new Set())
   const knownOrderIdsRef = useRef(new Set())
@@ -740,6 +753,74 @@ export default function FarmerDashboardPage() {
     navigate('/login', { replace: true })
   }
 
+  const handleGenerateInvoice = (order) => {
+    const opened = openInvoiceWindow({
+      invoicePrefix: 'INV',
+      orderId: order?.id,
+      invoiceDate: order?.created_at ? new Date(order.created_at) : new Date(),
+      title: 'KhetBazaar Invoice',
+      subtitle: 'One-click order invoice',
+      sellerLabel: 'Seller (Farmer)',
+      sellerName: user?.first_name || user?.username || 'Farmer',
+      sellerAddress: `${order?.pickup_city || user?.profile?.city || ''}, ${order?.pickup_state || user?.profile?.state || ''}`,
+      buyerLabel: 'Buyer',
+      buyerName: order?.buyer_name || `Buyer #${order?.buyer || ''}`,
+      buyerAddress: `${order?.drop_city || order?.buyer_city || ''}, ${order?.drop_state || order?.buyer_state || ''}`,
+      itemLabel: 'Crop',
+      itemName: order?.product_name || `Product #${order?.product || ''}`,
+      quantity: order?.quantity,
+      total: order?.agreed_price,
+    })
+
+    if (!opened) {
+      setError('Could not open invoice window. Please allow popups and try again.')
+    }
+  }
+
+  const openSellFastModal = () => {
+    setSellFastError('')
+    setSellFastSuccess('')
+    setSellFastForm({
+      productId: products[0]?.id ? String(products[0].id) : '',
+      quantityKg: products[0]?.quantity_available ? String(products[0].quantity_available) : '',
+      pricePerKg: products[0]?.base_price ? String(products[0].base_price) : '',
+      note: '',
+    })
+    setIsSellFastModalOpen(true)
+  }
+
+  const submitSellFastAlert = async (event) => {
+    event.preventDefault()
+    const quantityValue = Number(sellFastForm.quantityKg)
+    const priceValue = sellFastForm.pricePerKg ? Number(sellFastForm.pricePerKg) : null
+
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      setSellFastError('Enter a valid quantity in kg.')
+      return
+    }
+    if (priceValue !== null && (!Number.isFinite(priceValue) || priceValue <= 0)) {
+      setSellFastError('Enter a valid asking price per kg.')
+      return
+    }
+
+    setSellFastLoading(true)
+    setSellFastError('')
+    try {
+      await createSellFastAlert({
+        product: sellFastForm.productId || null,
+        quantity_kg: quantityValue,
+        price_per_kg: priceValue,
+        note: sellFastForm.note,
+      })
+      setSellFastSuccess('Emergency Sell Fast alert sent to all buyers.')
+      setTimeout(() => setIsSellFastModalOpen(false), 700)
+    } catch (err) {
+      setSellFastError(err?.response?.data?.detail || 'Could not send sell fast alert.')
+    } finally {
+      setSellFastLoading(false)
+    }
+  }
+
   return (
     <>
       <PageShell
@@ -747,6 +828,9 @@ export default function FarmerDashboardPage() {
         actions={
           <div className="flex gap-2">
             <Button onClick={() => setIsModalOpen(true)}>+ Add Food Item</Button>
+            <Button onClick={openSellFastModal} className="bg-red-600 hover:bg-red-700">
+              Emergency Sell Fast
+            </Button>
             <Button onClick={handleLogout} className="bg-gray-400 hover:bg-gray-500">
               Logout
             </Button>
@@ -990,6 +1074,15 @@ export default function FarmerDashboardPage() {
                         {String(requestingOrderId) !== String(order.id) && activeRequestOrderIds.has(Number(order.id)) && (
                           <p className="text-xs font-medium text-blue-700">Request Sent</p>
                         )}
+                        {order.status === 'confirmed' && (
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateInvoice(order)}
+                            className="rounded-[10px] bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                          >
+                            Invoice
+                          </button>
+                        )}
                         {canRequestLogisticsForOrder(order) && (
                           <button
                             type="button"
@@ -1225,6 +1318,83 @@ export default function FarmerDashboardPage() {
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleAddProduct} loading={isSubmitting} />
 
       <EditProductModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSubmit={handleEditProduct} loading={isSubmitting} product={editingProduct} />
+
+      {isSellFastModalOpen && (
+        <div className="fixed inset-0 z-[1250] flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-lg">
+            <p className="text-xl font-semibold text-red-700">Emergency: Sell Fast Alert</p>
+            <p className="mt-1 text-sm text-text-muted">This sends an urgent notification to all buyers.</p>
+
+            <form onSubmit={submitSellFastAlert} className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Crop Listing</label>
+                <select
+                  value={sellFastForm.productId}
+                  onChange={(event) => setSellFastForm((prev) => ({ ...prev, productId: event.target.value }))}
+                  className="w-full rounded-[10px] border border-border px-3 py-2"
+                >
+                  <option value="">General crops</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={String(product.id)}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Quantity (kg)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={sellFastForm.quantityKg}
+                    onChange={(event) => setSellFastForm((prev) => ({ ...prev, quantityKg: event.target.value }))}
+                    className="w-full rounded-[10px] border border-border px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Asking Price (₹/kg)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={sellFastForm.pricePerKg}
+                    onChange={(event) => setSellFastForm((prev) => ({ ...prev, pricePerKg: event.target.value }))}
+                    className="w-full rounded-[10px] border border-border px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Message to Buyers (optional)</label>
+                <textarea
+                  rows={3}
+                  value={sellFastForm.note}
+                  onChange={(event) => setSellFastForm((prev) => ({ ...prev, note: event.target.value }))}
+                  placeholder="Urgent sale today. Ready for immediate pickup."
+                  className="w-full rounded-[10px] border border-border px-3 py-2"
+                />
+              </div>
+
+              {sellFastError ? <p className="text-sm text-red-600">{sellFastError}</p> : null}
+              {sellFastSuccess ? <p className="text-sm text-emerald-700">{sellFastSuccess}</p> : null}
+
+              <div className="flex gap-2">
+                <Button type="button" onClick={() => setIsSellFastModalOpen(false)} className="bg-surface-2 text-text-primary hover:bg-surface-2">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={sellFastLoading} className="bg-red-600 hover:bg-red-700">
+                  {sellFastLoading ? 'Sending...' : 'Send To All Buyers'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      <BuyerFarmerChatWidget />
       <FarmerAIAssistant />
     </>
   )

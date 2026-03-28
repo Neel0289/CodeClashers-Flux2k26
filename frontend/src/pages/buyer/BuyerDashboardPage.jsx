@@ -7,16 +7,19 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useNavigate } from 'react-router-dom'
 
 import { createNegotiation, getNegotiations, respondNegotiation } from '../../api/negotiations'
+import { getSellFastAlerts } from '../../api/alerts'
 import { createOrder, getOrders } from '../../api/orders'
 import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
 import { getProducts } from '../../api/products'
 import { createReview } from '../../api/reviews'
 import Button from '../../components/shared/Button'
+import BuyerFarmerChatWidget from '../../components/shared/BuyerFarmerChatWidget'
 import Card from '../../components/shared/Card'
 import Input from '../../components/shared/Input'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
 import useAuth from '../../hooks/useAuth'
+import { openInvoiceWindow } from '../../utils/invoice'
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -116,6 +119,26 @@ export default function BuyerDashboardPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewError, setReviewError] = useState('')
   const [demoReviewSubmitted, setDemoReviewSubmitted] = useState(false)
+  const [sellFastAlerts, setSellFastAlerts] = useState([])
+  const [alertsLoading, setAlertsLoading] = useState(true)
+
+  const loadSellFastAlerts = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setAlertsLoading(true)
+    }
+    try {
+      const { data } = await getSellFastAlerts()
+      setSellFastAlerts(Array.isArray(data) ? data : [])
+    } catch {
+      if (!silent) {
+        setSellFastAlerts([])
+      }
+    } finally {
+      if (!silent) {
+        setAlertsLoading(false)
+      }
+    }
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -142,6 +165,14 @@ export default function BuyerDashboardPage() {
     }
 
     load()
+    loadSellFastAlerts()
+  }, [])
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadSellFastAlerts({ silent: true })
+    }, 7000)
+    return () => clearInterval(intervalId)
   }, [])
 
   useEffect(() => {
@@ -497,6 +528,26 @@ export default function BuyerDashboardPage() {
     navigate('/login', { replace: true })
   }
 
+  const handleGenerateInvoice = (order) => {
+    openInvoiceWindow({
+      invoicePrefix: 'BINV',
+      orderId: order?.id,
+      invoiceDate: order?.created_at ? new Date(order.created_at) : new Date(),
+      title: 'KhetBazaar Invoice',
+      subtitle: 'Buyer order invoice',
+      sellerLabel: 'Seller (Farmer)',
+      sellerName: order?.farmer_name || `Farmer #${order?.farmer || ''}`,
+      sellerAddress: `${order?.pickup_city || order?.farmer_city || ''}, ${order?.pickup_state || order?.farmer_state || ''}`,
+      buyerLabel: 'Buyer',
+      buyerName: user?.first_name || user?.username || 'Buyer',
+      buyerAddress: `${order?.drop_city || order?.buyer_city || ''}, ${order?.drop_state || order?.buyer_state || ''}`,
+      itemLabel: 'Crop',
+      itemName: order?.product_name || `Order #${order?.id || ''}`,
+      quantity: order?.quantity,
+      total: order?.agreed_price,
+    })
+  }
+
   const openReviewModal = (order) => {
     setReviewTarget(order)
     setReviewRating('5')
@@ -573,6 +624,47 @@ export default function BuyerDashboardPage() {
         ))}
       </div>
 
+      <Card className="mt-4 border-red-200 bg-red-50/60">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-lg font-semibold text-red-700">Emergency Sell Fast Alerts</p>
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+            Live Buyers Feed
+          </span>
+        </div>
+        {alertsLoading && <p className="text-sm text-text-muted">Loading alerts...</p>}
+        {!alertsLoading && sellFastAlerts.length === 0 && (
+          <p className="text-sm text-text-muted">No urgent sell alerts right now.</p>
+        )}
+        {!alertsLoading && sellFastAlerts.length > 0 && (
+          <div className="space-y-2">
+            {sellFastAlerts.slice(0, 4).map((alert) => (
+              <div key={alert.id} className="rounded-[12px] border border-red-200 bg-white px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">
+                      {alert.farmer_name} wants to sell {alert.product_name}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      {Number(alert.quantity_kg || 0).toFixed(1)} kg
+                      {alert.price_per_kg ? ` | ₹${alert.price_per_kg}/kg` : ''}
+                    </p>
+                    {alert.note ? <p className="mt-1 text-xs text-text-primary">{alert.note}</p> : null}
+                  </div>
+                  <p className="text-[11px] text-text-muted">
+                    {new Date(alert.created_at).toLocaleString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Card>
           <p className="mb-4 text-lg font-semibold">Recent Orders</p>
@@ -588,6 +680,15 @@ export default function BuyerDashboardPage() {
                       <p className="text-xs text-text-muted">Ordered: {order.product_name || `Order #${order.id}`}</p>
                       <p className="text-xs text-text-muted">How much: {order.quantity} kg</p>
                       <p className="text-xs text-text-muted">Negotiated price: ₹{order.agreed_price}</p>
+                      {order.status === 'confirmed' && (
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateInvoice(order)}
+                          className="mt-2 rounded-[8px] bg-accent px-2 py-1 text-xs font-semibold text-white hover:opacity-90"
+                        >
+                          Invoice
+                        </button>
+                      )}
                       {order.buyer_review_submitted ? (
                         <p className="mt-1 text-xs font-medium text-emerald-700">Review submitted.</p>
                       ) : order.buyer_can_review ? (
@@ -904,6 +1005,8 @@ export default function BuyerDashboardPage() {
           </Card>
         </div>
       )}
+
+      <BuyerFarmerChatWidget />
     </>
   )
 }

@@ -8,6 +8,7 @@ import Card from '../../components/shared/Card'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
 import useAuth from '../../hooks/useAuth'
+import { openInvoiceWindow } from '../../utils/invoice'
 
 const INDIA_CENTER = [22.9734, 78.6569]
 const geocodeCache = new Map()
@@ -139,6 +140,34 @@ export default function LogisticsDashboardPage() {
     navigate('/login', { replace: true })
   }
 
+  const handleGenerateLogisticsInvoice = (request) => {
+    const totalValue = Number(request?.quoted_fee || request?.order_agreed_price || 0)
+    const quantityValue = Number(request?.order_quantity || request?.weight_kg || 0)
+    const routeText = `${request?.pickup_city || '-'}, ${request?.pickup_state || '-'} -> ${request?.drop_city || '-'}, ${request?.drop_state || '-'}`
+
+    openInvoiceWindow({
+      invoicePrefix: 'LINV',
+      orderId: request?.order || request?.id,
+      invoiceDate: request?.created_at ? new Date(request.created_at) : new Date(),
+      title: 'KhetBazaar Logistics Invoice',
+      subtitle: 'One-click logistics invoice',
+      sellerLabel: 'Service Provider (Logistics)',
+      sellerName: user?.first_name || user?.username || 'Logistics Partner',
+      sellerAddress: routeText,
+      buyerLabel: 'Farmer',
+      buyerName: request?.farmer_name || 'Farmer',
+      buyerAddress: `${request?.pickup_city || ''}, ${request?.pickup_state || ''}`,
+      itemLabel: 'Service',
+      itemName: `Logistics for ${request?.product_name || 'order'}`,
+      quantity: quantityValue,
+      total: totalValue,
+      extraRows: [
+        { label: 'Request Type', value: formatStatus(request?.status) },
+        { label: 'Route', value: routeText },
+      ],
+    })
+  }
+
   const reverseGeocodeAddress = async (lat, lon) => {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`,
@@ -261,10 +290,17 @@ export default function LogisticsDashboardPage() {
           {!requestsLoading && requests.length > 0 && (
             <div className="space-y-3">
               {requests.slice(0, 10).map((request) => (
-                <button
+                <div
                   key={request.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelectRequest(request)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      handleSelectRequest(request)
+                    }
+                  }}
                   className={`w-full rounded-[12px] border px-3 py-2 text-left transition-colors ${Number(selectedRequestId) === Number(request.id) ? 'border-emerald-600 bg-emerald-50' : 'border-border hover:border-emerald-300'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -280,6 +316,13 @@ export default function LogisticsDashboardPage() {
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <StatusBadge status={request.status} />
+                      <Button
+                        type="button"
+                        onClick={() => handleGenerateLogisticsInvoice(request)}
+                        className="bg-accent px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+                      >
+                        Invoice
+                      </Button>
                       {request.status === 'pending' && (
                         <Button
                           type="button"
@@ -298,7 +341,7 @@ export default function LogisticsDashboardPage() {
                       )}
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
