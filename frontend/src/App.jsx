@@ -25,6 +25,9 @@ import LogisticsDashboardPage from './pages/logistics/LogisticsDashboardPage'
 import LogisticsDeliveriesPage from './pages/logistics/LogisticsDeliveriesPage'
 import LogisticsRequestDetailPage from './pages/logistics/LogisticsRequestDetailPage'
 import LogisticsRequestsPage from './pages/logistics/LogisticsRequestsPage'
+import FarmerProfilePage from './pages/farmer/FarmerProfile'
+import BuyerProfilePage from './pages/buyer/BuyerProfile'
+import LogisticsProfilePage from './pages/logistics/LogisticsProfile'
 
 function App() {
   const location = useLocation()
@@ -51,6 +54,7 @@ function App() {
           <Route path="/farmer/negotiations/:id" element={<ProtectedRoute role="farmer"><FarmerNegotiationDetailPage /></ProtectedRoute>} />
           <Route path="/farmer/orders" element={<ProtectedRoute role="farmer"><FarmerOrdersPage /></ProtectedRoute>} />
           <Route path="/farmer/orders/:id" element={<ProtectedRoute role="farmer"><FarmerOrderDetailPage /></ProtectedRoute>} />
+          <Route path="/farmer/profile" element={<ProtectedRoute role="farmer"><FarmerProfilePage /></ProtectedRoute>} />
 
           <Route path="/buyer/dashboard" element={<ProtectedRoute role="buyer"><BuyerDashboardPage /></ProtectedRoute>} />
           <Route path="/buyer/catalog" element={<ProtectedRoute role="buyer"><BuyerCatalogPage /></ProtectedRoute>} />
@@ -59,11 +63,13 @@ function App() {
           <Route path="/buyer/negotiations/:id" element={<ProtectedRoute role="buyer"><BuyerNegotiationDetailPage /></ProtectedRoute>} />
           <Route path="/buyer/orders" element={<ProtectedRoute role="buyer"><BuyerOrdersPage /></ProtectedRoute>} />
           <Route path="/buyer/orders/:id" element={<ProtectedRoute role="buyer"><BuyerOrderDetailPage /></ProtectedRoute>} />
+          <Route path="/buyer/profile" element={<ProtectedRoute role="buyer"><BuyerProfilePage /></ProtectedRoute>} />
 
           <Route path="/logistics/dashboard" element={<ProtectedRoute role="logistics"><LogisticsDashboardPage /></ProtectedRoute>} />
           <Route path="/logistics/requests" element={<ProtectedRoute role="logistics"><LogisticsRequestsPage /></ProtectedRoute>} />
           <Route path="/logistics/requests/:id" element={<ProtectedRoute role="logistics"><LogisticsRequestDetailPage /></ProtectedRoute>} />
           <Route path="/logistics/deliveries" element={<ProtectedRoute role="logistics"><LogisticsDeliveriesPage /></ProtectedRoute>} />
+          <Route path="/logistics/profile" element={<ProtectedRoute role="logistics"><LogisticsProfilePage /></ProtectedRoute>} />
         </Routes>
       </motion.div>
     </AnimatePresence>

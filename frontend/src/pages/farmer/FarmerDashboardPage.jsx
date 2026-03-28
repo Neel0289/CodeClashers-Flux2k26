@@ -912,6 +912,9 @@ export default function FarmerDashboardPage() {
         title="Farmer Dashboard"
         actions={
           <div className="flex gap-2">
+            <Button onClick={() => navigate('/farmer/profile')} className="bg-accent/10 text-accent border border-accent/20 hover:bg-accent hover:text-white transition-colors">
+              My Profile
+            </Button>
             <Button onClick={() => setIsModalOpen(true)}>+ Add Food Item</Button>
             <Button onClick={openSellFastModal} className="bg-red-600 hover:bg-red-700">
               Emergency Sell Fast

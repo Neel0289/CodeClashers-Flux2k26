@@ -773,7 +773,14 @@ export default function BuyerDashboardPage() {
             <span>Buyer Dashboard</span>
           </div>
         }
-      actions={<Button onClick={handleLogout}>Logout</Button>}
+      actions={
+        <div className="flex gap-2">
+          <Button onClick={() => navigate('/buyer/profile')} className="bg-accent/10 text-accent border border-accent/20 hover:bg-accent hover:text-white transition-colors">
+            My Profile
+          </Button>
+          <Button onClick={handleLogout}>Logout</Button>
+        </div>
+      }
     >
       <div className="grid gap-4 md:grid-cols-4">
         {stats.map((stat) => (

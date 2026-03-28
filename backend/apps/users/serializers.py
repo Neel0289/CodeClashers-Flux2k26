@@ -99,6 +99,26 @@ class RegisterSerializer(serializers.Serializer):
     operating_states = serializers.ListField(child=serializers.CharField(), required=False)
     vehicles = serializers.JSONField(required=False)
 
+    # Missing fields from models but used in RegisterPage
+    aadhaar_number = serializers.CharField(required=False, allow_blank=True)
+    bank_account_holder = serializers.CharField(required=False, allow_blank=True)
+    bank_account_number = serializers.CharField(required=False, allow_blank=True)
+    bank_ifsc = serializers.CharField(required=False, allow_blank=True)
+    bank_name = serializers.CharField(required=False, allow_blank=True)
+    bank_branch = serializers.CharField(required=False, allow_blank=True)
+    passbook_photo_file = serializers.ImageField(required=False, allow_null=True)
+
+    farmer_photo_file = serializers.ImageField(required=False, allow_null=True)
+    village = serializers.CharField(required=False, allow_blank=True)
+    taluka = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    certificates = serializers.CharField(required=False, allow_blank=True)
+
+    buyer_photo_file = serializers.ImageField(required=False, allow_null=True)
+    district = serializers.CharField(required=False, allow_blank=True)
+
+    logistics_photo_file = serializers.ImageField(required=False, allow_null=True)
+
     def validate(self, attrs):
         attrs['email'] = attrs['email'].strip().lower()
         if User.objects.filter(email__iexact=attrs['email']).exists():
@@ -185,37 +205,58 @@ class RegisterSerializer(serializers.Serializer):
             phone=validated_data['phone'],
             role=validated_data['role'],
             profile_complete=True,
+            aadhaar_number=validated_data.get('aadhaar_number', ''),
+            bank_account_holder=validated_data.get('bank_account_holder', ''),
+            bank_account_number=validated_data.get('bank_account_number', ''),
+            bank_ifsc=validated_data.get('bank_ifsc', ''),
+            bank_name=validated_data.get('bank_name', ''),
+            bank_branch=validated_data.get('bank_branch', ''),
+            passbook_photo=validated_data.get('passbook_photo_file'),
         )
 
         user.set_password(password)
         user.save(update_fields=['password'])
 
         if user.role == 'farmer':
+            certs_raw = validated_data.get('certificates', '[]')
+            try:
+                certs = json.loads(certs_raw) if isinstance(certs_raw, str) else certs_raw
+            except:
+                certs = []
             FarmerProfile.objects.create(
                 user=user,
-                farm_name=validated_data['farm_name'],
-                state=validated_data['farm_state'],
-                city=validated_data['farm_city'],
-                latitude=validated_data['farm_latitude'],
-                longitude=validated_data['farm_longitude'],
+                farm_name=validated_data.get('farm_name', ''),
+                state=validated_data.get('farm_state', ''),
+                city=validated_data.get('farm_city', ''),
+                village=validated_data.get('village', ''),
+                taluka=validated_data.get('taluka', ''),
+                address=validated_data.get('address', ''),
+                latitude=validated_data.get('farm_latitude'),
+                longitude=validated_data.get('farm_longitude'),
+                certificates=certs,
+                photo=validated_data.get('farmer_photo_file'),
             )
         elif user.role == 'buyer':
             BuyerProfile.objects.create(
                 user=user,
-                business_name=validated_data['business_name'],
-                business_type=validated_data['business_type'],
-                state=validated_data['state'],
-                city=validated_data['city'],
-                latitude=validated_data['buyer_latitude'],
-                longitude=validated_data['buyer_longitude'],
+                business_name=validated_data.get('business_name', ''),
+                business_type=validated_data.get('business_type', 'buyer'),
+                state=validated_data.get('state', ''),
+                city=validated_data.get('city', ''),
+                district=validated_data.get('district', ''),
+                address=validated_data.get('address', ''),
+                latitude=validated_data.get('buyer_latitude'),
+                longitude=validated_data.get('buyer_longitude'),
+                photo=validated_data.get('buyer_photo_file'),
             )
         elif user.role == 'logistics':
             LogisticsProfile.objects.create(
                 user=user,
-                vehicle_type=validated_data['vehicle_type'],
-                max_weight_kg=validated_data['max_weight_capacity'],
-                operating_states=validated_data['operating_states'],
+                vehicle_type=validated_data.get('vehicle_type', 'truck'),
+                max_weight_kg=validated_data.get('max_weight_capacity', 0),
+                operating_states=validated_data.get('operating_states', []),
                 vehicles=validated_data.get('vehicles', []),
+                photo=validated_data.get('logistics_photo_file'),
             )
 
         return user
@@ -253,19 +294,19 @@ class LoginSerializer(serializers.Serializer):
 class FarmerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = FarmerProfile
-        fields = ['farm_name', 'state', 'city', 'latitude', 'longitude']
+        fields = ['farm_name', 'state', 'city', 'village', 'taluka', 'address', 'certificates', 'photo', 'latitude', 'longitude']
 
 
 class BuyerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyerProfile
-        fields = ['business_name', 'business_type', 'state', 'city', 'latitude', 'longitude']
+        fields = ['business_name', 'business_type', 'state', 'city', 'district', 'address', 'photo', 'latitude', 'longitude']
 
 
 class LogisticsProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = LogisticsProfile
-        fields = ['vehicle_type', 'max_weight_kg', 'operating_states', 'vehicles', 'rating', 'total_deliveries']
+        fields = ['vehicle_type', 'max_weight_kg', 'operating_states', 'vehicles', 'photo', 'rating', 'total_deliveries']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -273,7 +314,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'email', 'phone', 'role', 'profile_complete', 'profile']
+        fields = [
+            'id', 'first_name', 'email', 'phone', 'role', 'profile_complete', 'profile',
+            'aadhaar_number', 'bank_account_holder', 'bank_account_number', 'bank_ifsc', 'bank_name', 'bank_branch', 'passbook_photo'
+        ]
 
     def get_profile(self, obj):
         if obj.role == 'farmer' and hasattr(obj, 'farmer_profile'):
