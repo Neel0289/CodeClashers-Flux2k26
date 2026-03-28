@@ -22,7 +22,7 @@ export default function Footer() {
           </div>
         ))}
       </div>
-      <p className="mx-auto mt-8 max-w-6xl text-sm text-text-muted">Copyright 2026 KhetBazar</p>
+      <p className="mx-auto mt-8 max-w-6xl text-center text-sm text-text-muted">Copyright 2026 KhetBazar</p>
     </footer>
   )
 }

@@ -95,7 +95,7 @@ export default function Hero() {
             </li>
             <li className="flex items-center gap-3 text-text-primary">
               <Sparkles size={18} className="text-accent" />
-              <span>Get AI price suggestions</span>
+              <span>Get price suggestions</span>
             </li>
           </ul>
         </motion.div>

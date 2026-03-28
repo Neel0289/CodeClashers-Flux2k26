@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     'apps.logistics',
     'apps.payments',
     'apps.market_prices',
+    'apps.chats',
+    'apps.alerts',
 ]
 
 MIDDLEWARE = [

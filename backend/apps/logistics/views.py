@@ -147,6 +147,8 @@ class LogisticsRequestListAPIView(APIView):
 			queryset = LogisticsRequest.objects.filter(logistics_partner=request.user)
 		elif request.user.role == 'farmer':
 			queryset = LogisticsRequest.objects.filter(order__farmer=request.user)
+		elif request.user.role == 'buyer':
+			queryset = LogisticsRequest.objects.filter(order__buyer=request.user)
 		else:
 			queryset = LogisticsRequest.objects.none()
 		return Response(LogisticsRequestSerializer(queryset.order_by('-created_at'), many=True).data)
