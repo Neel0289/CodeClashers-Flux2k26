@@ -26,8 +26,8 @@ export default function Hero() {
           </motion.h1>
           <p className="mb-6 text-white/90">KhetBazar connects farmers directly to restaurants and stores - with negotiation, smart logistics matching, and escrow payments.</p>
           <div className="flex gap-3">
-            <Button className="bg-white text-brown hover:bg-white/90">I'm a Farmer</Button>
-            <Button className="bg-white text-brown hover:bg-white/90">I'm a Buyer</Button>
+            <Button className="bg-white text-black hover:bg-white/90 hover:text-black font-bold">I'm a Farmer</Button>
+            <Button className="bg-white text-black hover:bg-white/90 hover:text-black font-bold">I'm a Buyer</Button>
           </div>
         </div>
         <motion.div
