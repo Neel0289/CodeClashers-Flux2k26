@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   User,
@@ -8,8 +9,10 @@ import {
   Phone,
   Mail,
   Shield,
-  ShoppingBag
+  ShoppingBag,
+  Camera
 } from 'lucide-react'
+import { updateProfile } from '../../api/auth'
 import useAuth from '../../hooks/useAuth'
 import PageShell from '../../components/shared/PageShell'
 
@@ -35,8 +38,12 @@ const SectionHeader = ({ icon: Icon, title }) => (
 )
 
 export default function BuyerProfilePage() {
-  const { user } = useAuth()
+  const { user, setUser } = useAuth()
   const profile = user?.profile || {}
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const [photoSuccess, setPhotoSuccess] = useState('')
+  const fileInputRef = useRef(null)
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -60,6 +67,42 @@ export default function BuyerProfilePage() {
   const passbookImageUrl = user?.passbook_photo
     ? (user.passbook_photo.startsWith('http') ? user.passbook_photo : `${API_BASE}${user.passbook_photo}`)
     : null
+
+  const handleProfilePhotoChange = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please select an image file (JPG, PNG, WEBP).')
+      setPhotoSuccess('')
+      return
+    }
+
+    const maxSizeBytes = 5 * 1024 * 1024
+    if (file.size > maxSizeBytes) {
+      setPhotoError('Image is too large. Please upload up to 5 MB.')
+      setPhotoSuccess('')
+      return
+    }
+
+    setUploadingPhoto(true)
+    setPhotoError('')
+    setPhotoSuccess('')
+
+    try {
+      const formData = new FormData()
+      formData.append('photo', file)
+      const { data } = await updateProfile(formData)
+      setUser(data)
+      setPhotoSuccess('Profile picture updated successfully.')
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setPhotoError(detail || 'Could not update profile picture. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
 
   return (
     <PageShell title="Your Buyer Profile">
@@ -90,7 +133,23 @@ export default function BuyerProfilePage() {
                   </div>
                 )}
               </div>
-              <div className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg border-2 border-white">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg border-2 border-white disabled:cursor-not-allowed disabled:opacity-60"
+                title="Upload profile picture"
+              >
+                <Camera className="h-5 w-5" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleProfilePhotoChange}
+              />
+              <div className="absolute -bottom-2 -left-2 flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg border-2 border-white">
                 <ShoppingBag className="h-5 w-5" />
               </div>
             </div>
@@ -115,6 +174,9 @@ export default function BuyerProfilePage() {
                   {profile.business_type || 'Customer'}
                 </span>
               </div>
+              {uploadingPhoto ? <p className="mt-3 text-xs font-semibold text-accent">Uploading profile picture...</p> : null}
+              {photoError ? <p className="mt-3 text-xs font-semibold text-red-600">{photoError}</p> : null}
+              {photoSuccess ? <p className="mt-3 text-xs font-semibold text-green-700">{photoSuccess}</p> : null}
             </div>
           </div>
         </motion.div>
@@ -132,6 +194,8 @@ export default function BuyerProfilePage() {
               <div className="sm:col-span-2">
                 <LabelValue icon={MapPin} label="Full Address" value={profile.address} />
               </div>
+              <LabelValue icon={MapPin} label="Latitude" value={profile.latitude} />
+              <LabelValue icon={MapPin} label="Longitude" value={profile.longitude} />
             </div>
           </motion.div>
 

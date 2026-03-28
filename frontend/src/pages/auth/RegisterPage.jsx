@@ -283,8 +283,8 @@ export default function RegisterPage() {
       formData.set('bank_branch', bankDetails.branch)
 
       // Attach photo files
-      if (farmerPhoto) formData.set('farmer_photo', farmerPhoto)
-      if (passbookPhoto) formData.set('passbook_photo', passbookPhoto)
+      if (farmerPhoto) formData.set('farmer_photo_file', farmerPhoto)
+      if (passbookPhoto) formData.set('passbook_photo_file', passbookPhoto)
     }
 
     if (role === 'buyer') {
@@ -293,6 +293,14 @@ export default function RegisterPage() {
         setSubmitting(false)
         return
       }
+      const selectedBusinessType = String(formData.get('business_type') || formData.get('buyer_type') || '').trim().toLowerCase()
+      if (!selectedBusinessType) {
+        setError('Please select a business type.')
+        setSubmitting(false)
+        return
+      }
+      formData.set('business_type', selectedBusinessType)
+
       formData.set('buyer_latitude', buyerCoords.latitude)
       formData.set('buyer_longitude', buyerCoords.longitude)
 
@@ -304,7 +312,8 @@ export default function RegisterPage() {
       formData.set('bank_branch', bankDetails.branch)
 
       // Attach buyer photo
-      if (buyerPhoto) formData.set('buyer_photo', buyerPhoto)
+      if (buyerPhoto) formData.set('buyer_photo_file', buyerPhoto)
+      if (passbookPhoto) formData.set('passbook_photo_file', passbookPhoto)
     }
 
     if (role === 'logistics') {
@@ -359,7 +368,7 @@ export default function RegisterPage() {
       formData.set('bank_name', bankDetails.bankName)
       formData.set('bank_branch', bankDetails.branch)
       // Attach passbook if shared
-      if (passbookPhoto) formData.set('passbook_photo', passbookPhoto)
+      if (passbookPhoto) formData.set('passbook_photo_file', passbookPhoto)
     }
 
     formData.set('role', role)
@@ -540,11 +549,16 @@ export default function RegisterPage() {
               <>
                 <SectionHeading>Personal Details</SectionHeading>
                 <Input name="name" placeholder="Full name" required />
+                <Input name="business_name" placeholder="Business name" required />
                 <div className="grid gap-4 md:grid-cols-2">
                   <Input name="aadhaar_number" placeholder="Aadhaar Number (12 digits)" maxLength={12} required />
                   <Input name="district" placeholder="District" required />
                 </div>
                 <Input name="address" placeholder="Full Address" required />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input name="city" placeholder="City" required />
+                  <Input name="state" placeholder="State" required />
+                </div>
                 <PhotoUpload
                   label="Profile Photo *"
                   name="buyer_photo_file"
@@ -553,9 +567,9 @@ export default function RegisterPage() {
                 />
 
                 <SectionHeading>Professional Details</SectionHeading>
-                <select name="buyer_type" className={inputCls} required>
+                <select name="business_type" className={inputCls} required>
                   <option value="">Select Professional Type</option>
-                  <option value="shop">Shop</option>
+                  <option value="store">Store</option>
                   <option value="restaurant">Restaurant</option>
                   <option value="buyer">Buyer</option>
                 </select>

@@ -907,43 +907,48 @@ export default function FarmerDashboardPage() {
   }
 
   return (
-    <>
+    <div className="min-h-screen farm-bg pb-12">
       <PageShell
-        title="Farmer Dashboard"
+        title={
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">🌾</span>
+            <span>Farmer Dashboard</span>
+          </div>
+        }
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => navigate('/farmer/profile')} className="bg-accent/10 text-accent border border-accent/20 hover:bg-accent hover:text-white transition-colors">
+            <Button variant="clay" onClick={() => navigate('/farmer/profile')} className="bg-accent/10 text-accent border border-accent/20 hover:bg-accent hover:text-white transition-colors">
               My Profile
             </Button>
-            <Button onClick={() => setIsModalOpen(true)}>+ Add Food Item</Button>
-            <Button onClick={openSellFastModal} className="bg-red-600 hover:bg-red-700">
+            <Button variant="clay" onClick={() => setIsModalOpen(true)}>+ Add Food Item</Button>
+            <Button variant="clay" onClick={openSellFastModal} className="bg-red-600 hover:bg-red-700 text-white">
               Emergency Sell Fast
             </Button>
-            <Button onClick={handleLogout} className="bg-gray-400 hover:bg-gray-500">
+            <Button variant="clay" onClick={handleLogout} className="bg-gray-400 hover:bg-gray-500 text-white">
               Logout
             </Button>
           </div>
         }
       >
-        <div className="sticky top-3 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-[12px] border border-border bg-surface p-2">
+        <div className="sticky top-3 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-[24px] border border-white/60 bg-white/55 p-3 shadow-[0_16px_36px_-20px_rgba(15,23,42,0.45)] backdrop-blur-xl">
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'dashboard' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+            className={`rounded-[14px] px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-white/65 text-text-primary ring-1 ring-black/5 hover:bg-white'}`}
           >
             Dashboard
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('market-intelligence')}
-            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'market-intelligence' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+            className={`rounded-[14px] px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'market-intelligence' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-white/65 text-text-primary ring-1 ring-black/5 hover:bg-white'}`}
           >
             Market Intelligence
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('orders-logistics')}
-            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'orders-logistics' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+            className={`rounded-[14px] px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'orders-logistics' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-white/65 text-text-primary ring-1 ring-black/5 hover:bg-white'}`}
           >
             Orders & Logistics
           </button>
@@ -953,9 +958,9 @@ export default function FarmerDashboardPage() {
           <>
             <div className="grid gap-4 md:grid-cols-4">
               {stats.map((stat) => (
-                <Card key={stat.label} className="p-4">
-                  <p className="text-sm text-text-muted">{stat.label}</p>
-                  <p className="mt-2 text-3xl font-bold text-accent">{stat.value}</p>
+                <Card variant="clay" key={stat.label} className="p-6">
+                  <p className="text-sm font-semibold text-text-muted">{stat.label}</p>
+                  <p className="mt-2 text-4xl font-extrabold text-accent">{stat.value}</p>
                 </Card>
               ))}
             </div>
@@ -967,7 +972,7 @@ export default function FarmerDashboardPage() {
             />
 
             <div className="mt-6">
-              <Card>
+              <Card variant="clay" className="bg-white/75 backdrop-blur-md">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-lg font-semibold">Buyer Reviews</p>
                   {averageReviewRating && (
@@ -989,7 +994,7 @@ export default function FarmerDashboardPage() {
                       const stars = `${'★'.repeat(ratingValue)}${'☆'.repeat(Math.max(0, 5 - ratingValue))}`
 
                       return (
-                        <div key={review.id} className="rounded-[12px] border border-border px-3 py-2">
+                        <div key={review.id} className="clay-card !rounded-[18px] bg-white/75 px-4 py-3 shadow-sm">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="font-medium">{review.reviewer_name || `Buyer #${review.reviewer}`}</p>
@@ -1014,17 +1019,21 @@ export default function FarmerDashboardPage() {
         )}
 
         {activeTab === 'market-intelligence' && (
-          <div className="mt-4">
+          <div className="mt-4 rounded-[24px] border border-white/60 bg-white/55 p-3 shadow-[0_18px_38px_-22px_rgba(15,23,42,0.5)] backdrop-blur-xl">
             <MarketIntelligence embedded />
           </div>
         )}
 
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        {error && (
+          <Card variant="clay" className="mt-4 border-red-300 bg-red-50 text-sm text-red-700">
+            {error}
+          </Card>
+        )}
 
         {activeTab === 'orders-logistics' && (
-          <>
+          <div className="rounded-[26px] border border-white/60 bg-white/45 p-3 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl">
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card variant="clay" className="bg-white/80 backdrop-blur-sm">
             <p className="mb-4 text-lg font-semibold">Active Listings</p>
             {deleteError && <div className="mb-3 rounded-[12px] bg-red-50 p-2 text-xs text-red-600">{deleteError}</div>}
             {loading && <p className="text-sm text-text-muted">Loading listings...</p>}
@@ -1034,7 +1043,7 @@ export default function FarmerDashboardPage() {
                 {recentListings.map((product) => (
                   <div
                     key={product.id}
-                    className="flex items-center justify-between rounded-[12px] border border-border px-3 py-2"
+                    className="clay-card !rounded-[16px] flex items-center justify-between bg-white/75 px-3 py-2"
                   >
                     <div className="flex-1">
                       <p className="font-medium">{product.name}</p>
@@ -1072,7 +1081,7 @@ export default function FarmerDashboardPage() {
             />
           </Card>
 
-          <Card>
+          <Card variant="clay" className="bg-white/80 backdrop-blur-sm">
             <p className="mb-4 text-lg font-semibold">Negotiated Orders</p>
             {loading && <p className="text-sm text-text-muted">Loading negotiations...</p>}
             {!loading && recentNegotiations.length === 0 && (
@@ -1083,7 +1092,7 @@ export default function FarmerDashboardPage() {
                 {recentNegotiations.map((negotiation) => (
                   <div
                     key={negotiation.id}
-                    className="rounded-[12px] border border-border px-3 py-2"
+                    className="clay-card !rounded-[16px] bg-white/75 px-3 py-2"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1105,7 +1114,7 @@ export default function FarmerDashboardPage() {
                             value={counterPrices[negotiation.id] || ''}
                             onChange={(event) => setCounterPrices((prev) => ({ ...prev, [negotiation.id]: event.target.value }))}
                             placeholder="Counter ₹/kg"
-                            className="w-32 rounded-[8px] border border-border px-2 py-1 text-xs"
+                            className="clay-input w-32 rounded-[10px] px-2 py-1 text-xs"
                           />
                           <button
                             type="button"
@@ -1143,7 +1152,7 @@ export default function FarmerDashboardPage() {
             )}
           </Card>
 
-          <Card>
+          <Card variant="clay" className="bg-white/80 backdrop-blur-sm">
             <p className="mb-4 text-lg font-semibold">Orders</p>
             {loading && <p className="text-sm text-text-muted">Loading orders...</p>}
             {!loading && recentOrders.length === 0 && (
@@ -1154,7 +1163,7 @@ export default function FarmerDashboardPage() {
                 {recentOrders.map((order) => (
                   <div
                     key={order.id}
-                    className="rounded-[12px] border border-border px-3 py-2"
+                    className="clay-card !rounded-[16px] bg-white/75 px-3 py-2"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1207,7 +1216,7 @@ export default function FarmerDashboardPage() {
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <Card>
+          <Card variant="clay" className="bg-white/80 backdrop-blur-sm">
             <p className="mb-4 text-lg font-semibold">Request Logistics</p>
 
             <div className="grid gap-3">
@@ -1217,7 +1226,7 @@ export default function FarmerDashboardPage() {
                 </p>
               )}
               {selectedOrder && (
-                <div className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                <div className="clay-input rounded-[12px] bg-surface-2 px-3 py-2 text-sm text-text-primary">
                   <p className="font-medium">Selected Order: #{selectedOrder.id}</p>
                   <p>Customer: {selectedOrder.buyer_name || `Buyer #${selectedOrder.buyer}`} | Product: {selectedOrder.product_name}</p>
                   <p>Quantity: {selectedOrder.quantity} kg | Value: ₹{selectedOrder.agreed_price}</p>
@@ -1227,7 +1236,7 @@ export default function FarmerDashboardPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <p className="mb-1 text-sm font-medium text-text-primary">Pickup Address (Default Farmer)</p>
-                  <p className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                  <p className="clay-input rounded-[12px] bg-surface-2 px-3 py-2 text-sm text-text-primary">
                     {selectedOrderRoute?.pickup_city && selectedOrderRoute?.pickup_state
                       ? `${selectedOrderRoute.pickup_city}, ${selectedOrderRoute.pickup_state}`
                       : 'Not available'}
@@ -1235,7 +1244,7 @@ export default function FarmerDashboardPage() {
                 </div>
                 <div>
                   <p className="mb-1 text-sm font-medium text-text-primary">Drop Address (Default Customer)</p>
-                  <p className="rounded-[12px] border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary">
+                  <p className="clay-input rounded-[12px] bg-surface-2 px-3 py-2 text-sm text-text-primary">
                     {selectedOrderRoute?.drop_city && selectedOrderRoute?.drop_state
                       ? `${selectedOrderRoute.drop_city}, ${selectedOrderRoute.drop_state}`
                       : 'Not available'}
@@ -1243,7 +1252,7 @@ export default function FarmerDashboardPage() {
                 </div>
               </div>
 
-              <div className="rounded-[12px] border border-border bg-white p-3">
+              <div className="rounded-[16px] border border-white/60 bg-white/65 p-3 shadow-[0_10px_26px_-18px_rgba(15,23,42,0.6)] backdrop-blur-xl">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium text-text-primary">Pickup & Drop Route Preview</p>
                 </div>
@@ -1251,7 +1260,7 @@ export default function FarmerDashboardPage() {
                   Route is automatically taken from farmer address (pickup) and customer address (drop).
                   {mapPreviewLoading ? ' | Loading map preview...' : ''}
                 </p>
-                <div className="mt-3 h-64 overflow-hidden rounded-[12px] border border-border">
+                <div className="mt-3 h-64 overflow-hidden rounded-[14px] border border-white/70 bg-white/60">
                   {!showPaymentAnimation && (
                     <MapContainer
                       key={`${pickupCoords?.lat || 'p0'}-${dropCoords?.lat || 'd0'}-${bookingForm.orderId || 'none'}`}
@@ -1329,7 +1338,7 @@ export default function FarmerDashboardPage() {
                   key={partner.id}
                   type="button"
                   onClick={() => setSelectedPartnerId(String(partner.logistics_partner_id || partner.id))}
-                  className={`w-full rounded-[10px] border p-2 text-left transition-colors ${String(selectedPartnerId) === String(partner.logistics_partner_id || partner.id) ? 'border-emerald-600 bg-emerald-50' : 'border-border hover:border-emerald-300'}`}
+                  className={`w-full rounded-[14px] border p-2 text-left transition-colors ${String(selectedPartnerId) === String(partner.logistics_partner_id || partner.id) ? 'border-emerald-600 bg-emerald-50 shadow-inner' : 'border-white/70 bg-white/75 hover:border-emerald-300'}`}
                 >
                   <div className="text-xs text-text-primary">
                     <p className="font-medium">
@@ -1344,7 +1353,7 @@ export default function FarmerDashboardPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card variant="clay" className="bg-white/80 backdrop-blur-sm">
             <p className="mb-4 text-lg font-semibold">Requested Logistics</p>
             {acceptedLogisticsCount > 0 && (
               <p className="mb-2 text-sm text-green-700">
@@ -1357,7 +1366,7 @@ export default function FarmerDashboardPage() {
             {recentLogisticsRequests.length > 0 && (
               <div className="space-y-3">
                 {recentLogisticsRequests.map((request) => (
-                  <div key={request.id} className="rounded-[12px] border border-border px-3 py-2">
+                  <div key={request.id} className="clay-card !rounded-[16px] bg-white/75 px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         {(() => {
@@ -1437,7 +1446,7 @@ export default function FarmerDashboardPage() {
             )}
           </Card>
             </div>
-          </>
+          </div>
         )}
       </PageShell>
 
@@ -1592,6 +1601,6 @@ export default function FarmerDashboardPage() {
 
       <BuyerFarmerChatWidget />
       <FarmerAIAssistant />
-    </>
+    </div>
   )
 }
