@@ -53,7 +53,7 @@ export default function LoginPage() {
     } catch (err) {
       const details = err?.response?.data
       if (!err?.response) {
-        setError('Cannot reach backend. Start Django server at 127.0.0.1:8000.')
+        setError('Cannot reach backend. Start Django server at localhost:8000.')
       } else if (typeof details === 'string') {
         setError(details)
       } else if (details?.detail) {
