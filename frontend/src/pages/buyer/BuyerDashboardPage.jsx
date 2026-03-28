@@ -10,6 +10,7 @@ import { createNegotiation, getNegotiations, respondNegotiation } from '../../ap
 import { createOrder, getOrders } from '../../api/orders'
 import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
 import { getProducts } from '../../api/products'
+import { createReview } from '../../api/reviews'
 import Button from '../../components/shared/Button'
 import Card from '../../components/shared/Card'
 import Input from '../../components/shared/Input'
@@ -25,8 +26,20 @@ L.Icon.Default.mergeOptions({
 
 const DEFAULT_CENTER = [22.9734, 78.6569]
 const NEARBY_RADIUS_KM = 300
+const DEMO_REVIEWS_STORAGE_KEY = 'khetbazaar_demo_reviews'
 
 const geocodeCache = new Map()
+
+function saveDemoReview(review) {
+  if (typeof window === 'undefined') return
+  try {
+    const existing = JSON.parse(window.localStorage.getItem(DEMO_REVIEWS_STORAGE_KEY) || '[]')
+    const next = [review, ...existing].slice(0, 30)
+    window.localStorage.setItem(DEMO_REVIEWS_STORAGE_KEY, JSON.stringify(next))
+  } catch {
+    // Ignore storage failures for demo-only data.
+  }
+}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const toRad = (value) => (value * Math.PI) / 180
@@ -97,6 +110,12 @@ export default function BuyerDashboardPage() {
   const [orderAnimationMessage, setOrderAnimationMessage] = useState('Preparing your order...')
   const [counterOffers, setCounterOffers] = useState({})
   const [negotiationActionId, setNegotiationActionId] = useState(null)
+  const [reviewTarget, setReviewTarget] = useState(null)
+  const [reviewRating, setReviewRating] = useState('5')
+  const [reviewComment, setReviewComment] = useState('')
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+  const [demoReviewSubmitted, setDemoReviewSubmitted] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -255,7 +274,27 @@ export default function BuyerDashboardPage() {
     ]
   }, [orders, negotiations])
 
-  const recentOrders = useMemo(() => orders.slice(0, 5), [orders])
+  const recentOrders = useMemo(() => {
+    const rows = orders.slice(0, 5)
+    if (!import.meta.env.DEV) return rows
+
+    const hasReviewable = rows.some((order) => order.buyer_can_review)
+    if (hasReviewable) return rows
+
+    const demoOrder = {
+      id: 'demo-review-order',
+      farmer: rows[0]?.farmer || 0,
+      farmer_name: 'Demo Farmer',
+      product_name: 'Demo Crop',
+      quantity: 10,
+      agreed_price: '999.00',
+      status: 'delivered',
+      buyer_can_review: !demoReviewSubmitted,
+      buyer_review_submitted: demoReviewSubmitted,
+      __demoReview: true,
+    }
+    return [demoOrder, ...rows].slice(0, 5)
+  }, [orders, demoReviewSubmitted])
   const recentNegotiations = useMemo(() => negotiations.slice(0, 5), [negotiations])
 
   const getLatestOfferTotal = (negotiation) => {
@@ -458,6 +497,67 @@ export default function BuyerDashboardPage() {
     navigate('/login', { replace: true })
   }
 
+  const openReviewModal = (order) => {
+    setReviewTarget(order)
+    setReviewRating('5')
+    setReviewComment('')
+    setReviewError('')
+  }
+
+  const closeReviewModal = () => {
+    setReviewTarget(null)
+    setReviewRating('5')
+    setReviewComment('')
+    setReviewError('')
+  }
+
+  const submitReview = async (event) => {
+    event.preventDefault()
+    if (!reviewTarget) return
+
+    const rating = Number(reviewRating)
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      setReviewError('Please select a rating between 1 and 5.')
+      return
+    }
+
+    setReviewSubmitting(true)
+    setReviewError('')
+    try {
+      if (reviewTarget.__demoReview) {
+        saveDemoReview({
+          id: `demo-${Date.now()}`,
+          order: reviewTarget.id,
+          reviewer: user?.id || null,
+          reviewer_name: user?.name || user?.username || 'Demo Buyer',
+          reviewee: reviewTarget.farmer || 0,
+          rating,
+          comment: reviewComment,
+          created_at: new Date().toISOString(),
+          product_name: reviewTarget.product_name || 'Demo Crop',
+          order_quantity: reviewTarget.quantity || 0,
+          order_value: reviewTarget.agreed_price || '0.00',
+          __demoReview: true,
+        })
+        setDemoReviewSubmitted(true)
+        closeReviewModal()
+        return
+      }
+
+      await createReview({
+        order_id: reviewTarget.id,
+        rating,
+        comment: reviewComment,
+      })
+      await reloadDashboardData()
+      closeReviewModal()
+    } catch (err) {
+      setReviewError(err?.response?.data?.detail || 'Could not submit review.')
+    } finally {
+      setReviewSubmitting(false)
+    }
+  }
+
   return (
     <>
       <PageShell
@@ -488,6 +588,19 @@ export default function BuyerDashboardPage() {
                       <p className="text-xs text-text-muted">Ordered: {order.product_name || `Order #${order.id}`}</p>
                       <p className="text-xs text-text-muted">How much: {order.quantity} kg</p>
                       <p className="text-xs text-text-muted">Negotiated price: ₹{order.agreed_price}</p>
+                      {order.buyer_review_submitted ? (
+                        <p className="mt-1 text-xs font-medium text-emerald-700">Review submitted.</p>
+                      ) : order.buyer_can_review ? (
+                        <button
+                          type="button"
+                          onClick={() => openReviewModal(order)}
+                          className="mt-2 rounded-[8px] bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800"
+                        >
+                          Review Farmer
+                        </button>
+                      ) : (order.status === 'delivered' || order.status === 'completed') ? (
+                        <p className="mt-1 text-xs text-amber-700">Review window closed (3 days after delivery).</p>
+                      ) : null}
                     </div>
                     <StatusBadge status={order.status} />
                   </div>
@@ -740,6 +853,51 @@ export default function BuyerDashboardPage() {
                 </Button>
                 <Button type="submit" disabled={orderingId === orderProduct.id}>
                   {orderingId === orderProduct.id ? 'Submitting...' : (orderMode === 'negotiate' ? 'Send Negotiation' : 'Confirm Order')}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {reviewTarget && (
+        <div className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-md">
+            <p className="text-xl font-semibold text-accent">Rate Farmer</p>
+            <p className="mt-2 text-sm text-text-muted">Order #{reviewTarget.id} • {reviewTarget.product_name}</p>
+            <form onSubmit={submitReview} className="mt-4 space-y-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Rating (1 to 5)</label>
+                <select
+                  value={reviewRating}
+                  onChange={(event) => setReviewRating(event.target.value)}
+                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+                >
+                  {[5, 4, 3, 2, 1].map((value) => (
+                    <option key={value} value={String(value)}>{value}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Comment (optional)</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(event) => setReviewComment(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+                  placeholder="Share your experience with the farmer"
+                />
+              </div>
+
+              {reviewError ? <p className="text-sm text-red-600">{reviewError}</p> : null}
+
+              <div className="flex gap-2">
+                <Button type="button" onClick={closeReviewModal} className="bg-surface-2 text-text-primary hover:bg-surface-2">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={reviewSubmitting}>
+                  {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
                 </Button>
               </div>
             </form>

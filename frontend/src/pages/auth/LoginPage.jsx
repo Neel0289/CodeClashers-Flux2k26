@@ -29,8 +29,20 @@ export default function LoginPage() {
       payload.email = String(payload.email || '').trim().toLowerCase()
       const { data } = await login(payload)
       completeAuth(data)
-    } catch {
-      setError('Invalid credentials')
+    } catch (err) {
+      const details = err?.response?.data
+      if (!err?.response) {
+        setError('Cannot reach backend API. Start Django server at 127.0.0.1:8000 and try again.')
+      } else if (typeof details === 'string') {
+        setError(details)
+      } else if (details?.detail) {
+        setError(details.detail)
+      } else if (Array.isArray(details?.non_field_errors) && details.non_field_errors[0]) {
+        setError(details.non_field_errors[0])
+      } else {
+        const first = details && typeof details === 'object' ? Object.values(details)[0] : null
+        setError(Array.isArray(first) ? first[0] : first || 'Invalid credentials')
+      }
     }
   }
 
@@ -43,7 +55,12 @@ export default function LoginPage() {
       completeAuth(data)
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setError(detail || err?.message || 'Google sign-in failed. Please try again.')
+      const tokenEmail = err?.response?.data?.google_email
+      if (detail && tokenEmail) {
+        setError(`${detail} Google account used: ${tokenEmail}`)
+      } else {
+        setError(detail || err?.message || 'Google sign-in failed. Please try again.')
+      }
     } finally {
       setGoogleLoading(false)
     }

@@ -31,6 +31,8 @@ urlpatterns = [
     path('api/orders/', include('apps.orders.urls')),
     path('api/logistics/', include('apps.logistics.urls')),
     path('api/payments/', include('apps.payments.urls')),
+    path('api/market-prices/', include('apps.market_prices.urls')),
+    path('api/weather/', include('apps.market_prices.weather_urls')),
     path('api/reviews/', ReviewListCreateAPIView.as_view(), name='reviews'),
 ]
 

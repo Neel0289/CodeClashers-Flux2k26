@@ -15,6 +15,7 @@ import FarmerDashboardPage from './pages/farmer/FarmerDashboardPage'
 import FarmerListingEditPage from './pages/farmer/FarmerListingEditPage'
 import FarmerListingNewPage from './pages/farmer/FarmerListingNewPage'
 import FarmerListingsPage from './pages/farmer/FarmerListingsPage'
+import MarketIntelligence from './pages/farmer/MarketIntelligence'
 import FarmerNegotiationDetailPage from './pages/farmer/FarmerNegotiationDetailPage'
 import FarmerNegotiationsPage from './pages/farmer/FarmerNegotiationsPage'
 import FarmerOrderDetailPage from './pages/farmer/FarmerOrderDetailPage'
@@ -43,6 +44,7 @@ function App() {
 
           <Route path="/farmer/dashboard" element={<ProtectedRoute role="farmer"><FarmerDashboardPage /></ProtectedRoute>} />
           <Route path="/farmer/listings" element={<ProtectedRoute role="farmer"><FarmerListingsPage /></ProtectedRoute>} />
+          <Route path="/farmer/market-intelligence" element={<ProtectedRoute role="farmer"><MarketIntelligence /></ProtectedRoute>} />
           <Route path="/farmer/listings/new" element={<ProtectedRoute role="farmer"><FarmerListingNewPage /></ProtectedRoute>} />
           <Route path="/farmer/listings/:id/edit" element={<ProtectedRoute role="farmer"><FarmerListingEditPage /></ProtectedRoute>} />
           <Route path="/farmer/negotiations" element={<ProtectedRoute role="farmer"><FarmerNegotiationsPage /></ProtectedRoute>} />

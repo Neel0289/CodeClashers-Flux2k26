@@ -87,7 +87,13 @@ class GoogleLoginAPIView(APIView):
 
 		user = find_user_for_google_email(email)
 		if not user:
-			return Response({'detail': 'No account exists for this Google email. Please sign up first.'}, status=status.HTTP_404_NOT_FOUND)
+			return Response(
+				{
+					'detail': 'No account exists for this Google email. Please sign up first.',
+					'google_email': email,
+				},
+				status=status.HTTP_404_NOT_FOUND,
+			)
 
 		return Response({'user': UserProfileSerializer(user).data, **get_token_payload(user)})
 

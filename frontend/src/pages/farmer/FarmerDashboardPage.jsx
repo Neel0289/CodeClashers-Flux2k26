@@ -7,18 +7,76 @@ import { getNegotiations, respondNegotiation } from '../../api/negotiations'
 import { getOrders, setOrderLocations } from '../../api/orders'
 import { createLogisticsCheckout, verifyLogisticsCheckout } from '../../api/payments'
 import { createProduct, updateProduct, deleteProduct, getProducts } from '../../api/products'
+import { getReviews } from '../../api/reviews'
 import AddProductModal from '../../components/farmer/AddProductModal'
+import FarmerAIAssistant from '../../components/farmer/FarmerAIAssistant'
+import FarmerInsightsCharts from '../../components/farmer/FarmerInsightsCharts'
 import EditProductModal from '../../components/farmer/EditProductModal'
 import Button from '../../components/shared/Button'
 import Card from '../../components/shared/Card'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
 import useAuth from '../../hooks/useAuth'
+import MarketIntelligence from './MarketIntelligence'
+
+const DEMO_REVIEWS_STORAGE_KEY = 'khetbazaar_demo_reviews'
 
 function formatStatus(value) {
   return String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function formatReviewDate(value) {
+  if (!value) return 'Recently'
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(value))
+  } catch {
+    return 'Recently'
+  }
+}
+
+function getDemoReviewsForFarmer(farmerId) {
+  if (typeof window === 'undefined' || !farmerId) return []
+  try {
+    const rows = JSON.parse(window.localStorage.getItem(DEMO_REVIEWS_STORAGE_KEY) || '[]')
+    if (!Array.isArray(rows)) return []
+    return rows.filter((item) => Number(item?.reviewee) === Number(farmerId))
+  } catch {
+    return []
+  }
+}
+
+function seedDemoReviewForFarmer(farmerId) {
+  if (typeof window === 'undefined' || !farmerId) return []
+  try {
+    const rows = JSON.parse(window.localStorage.getItem(DEMO_REVIEWS_STORAGE_KEY) || '[]')
+    const list = Array.isArray(rows) ? rows : []
+    const seeded = {
+      id: `demo-seeded-${farmerId}`,
+      order: 'demo-order-101',
+      reviewer: 'demo-buyer-1',
+      reviewer_name: 'Aarav Sharma',
+      reviewee: Number(farmerId),
+      rating: 5,
+      comment: 'Excellent quality crop. Fresh produce arrived exactly as promised.',
+      created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      product_name: 'Tomato',
+      order_quantity: 100,
+      order_value: '3200.00',
+      __demoReview: true,
+    }
+
+    const next = [seeded, ...list].slice(0, 30)
+    window.localStorage.setItem(DEMO_REVIEWS_STORAGE_KEY, JSON.stringify(next))
+    return [seeded]
+  } catch {
+    return []
+  }
 }
 
 const INDIA_CENTER = [22.9734, 78.6569]
@@ -47,6 +105,8 @@ export default function FarmerDashboardPage() {
   const [products, setProducts] = useState([])
   const [negotiations, setNegotiations] = useState([])
   const [orders, setOrders] = useState([])
+  const [reviews, setReviews] = useState([])
+  const [reviewsLoading, setReviewsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -71,6 +131,7 @@ export default function FarmerDashboardPage() {
   const [dropCoords, setDropCoords] = useState(null)
   const [mapPreviewLoading, setMapPreviewLoading] = useState(false)
   const [requestingOrderId, setRequestingOrderId] = useState(null)
+  const [activeTab, setActiveTab] = useState('dashboard')
   const partnersSectionRef = useRef(null)
   const celebratedPaidOrdersRef = useRef(new Set())
   const knownOrderIdsRef = useRef(new Set())
@@ -94,13 +155,15 @@ export default function FarmerDashboardPage() {
   const loadDashboard = async ({ silent = false } = {}) => {
     if (!silent) {
       setLoading(true)
+      setReviewsLoading(true)
     }
     setError('')
-    const [productsRes, negotiationsRes, ordersRes, logisticsRes] = await Promise.allSettled([
+    const [productsRes, negotiationsRes, ordersRes, logisticsRes, reviewsRes] = await Promise.allSettled([
       getProducts(),
       getNegotiations(),
       getOrders(),
       getLogisticsRequests(),
+      user?.id ? getReviews(user.id) : Promise.resolve({ data: [] }),
     ])
 
     if (productsRes.status === 'fulfilled') {
@@ -115,12 +178,27 @@ export default function FarmerDashboardPage() {
     if (logisticsRes.status === 'fulfilled') {
       setLogisticsRequests(Array.isArray(logisticsRes.value.data) ? logisticsRes.value.data : [])
     }
+    if (reviewsRes.status === 'fulfilled') {
+      const apiReviews = Array.isArray(reviewsRes.value.data) ? reviewsRes.value.data : []
+      let demoReviews = import.meta.env.DEV ? getDemoReviewsForFarmer(user?.id) : []
+      if (import.meta.env.DEV && demoReviews.length === 0 && apiReviews.length === 0) {
+        demoReviews = seedDemoReviewForFarmer(user?.id)
+      }
+      setReviews([...demoReviews, ...apiReviews])
+    } else {
+      let demoReviews = import.meta.env.DEV ? getDemoReviewsForFarmer(user?.id) : []
+      if (import.meta.env.DEV && demoReviews.length === 0) {
+        demoReviews = seedDemoReviewForFarmer(user?.id)
+      }
+      setReviews(demoReviews)
+    }
 
     if (productsRes.status === 'rejected' && negotiationsRes.status === 'rejected') {
       setError('Could not load dashboard data. Please refresh.')
     }
     if (!silent) {
       setLoading(false)
+      setReviewsLoading(false)
     }
   }
 
@@ -139,7 +217,7 @@ export default function FarmerDashboardPage() {
   useEffect(() => {
     loadDashboard()
     loadInitialPartners()
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     const refreshDashboard = () => {
@@ -161,7 +239,7 @@ export default function FarmerDashboardPage() {
       window.removeEventListener('focus', refreshDashboard)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     return () => {
@@ -623,9 +701,15 @@ export default function FarmerDashboardPage() {
     ]
   }, [products, negotiations, orders])
 
-  const recentListings = useMemo(() => products.slice(0, 5), [products])
-  const recentNegotiations = useMemo(() => negotiations.slice(0, 5), [negotiations])
-  const recentOrders = useMemo(() => orders.slice(0, 5), [orders])
+  const recentListings = useMemo(() => products, [products])
+  const recentNegotiations = useMemo(() => negotiations, [negotiations])
+  const recentOrders = useMemo(() => orders, [orders])
+  const recentReviews = useMemo(() => reviews.slice(0, 6), [reviews])
+  const averageReviewRating = useMemo(() => {
+    if (!reviews.length) return null
+    const total = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0)
+    return (total / reviews.length).toFixed(1)
+  }, [reviews])
   const recentLogisticsRequests = useMemo(() => logisticsRequests.slice(0, 5), [logisticsRequests])
   const acceptedLogisticsCount = useMemo(
     () => logisticsRequests.filter((request) => request.status === 'accepted').length,
@@ -669,25 +753,112 @@ export default function FarmerDashboardPage() {
           </div>
         }
       >
-        <div className="grid gap-4 md:grid-cols-4">
-          {stats.map((stat) => (
-            <Card key={stat.label} className="p-4">
-              <p className="text-sm text-text-muted">{stat.label}</p>
-              <p className="mt-2 text-3xl font-bold text-accent">{stat.value}</p>
-            </Card>
-          ))}
+        <div className="sticky top-3 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-[12px] border border-border bg-surface p-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'dashboard' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('market-intelligence')}
+            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'market-intelligence' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+          >
+            Market Intelligence
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('orders-logistics')}
+            className={`rounded-[10px] px-3 py-1.5 text-sm font-medium ${activeTab === 'orders-logistics' ? 'bg-accent text-white' : 'bg-surface-2 text-text-primary hover:bg-surface-3'}`}
+          >
+            Orders & Logistics
+          </button>
         </div>
+
+        {activeTab === 'dashboard' && (
+          <>
+            <div className="grid gap-4 md:grid-cols-4">
+              {stats.map((stat) => (
+                <Card key={stat.label} className="p-4">
+                  <p className="text-sm text-text-muted">{stat.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-accent">{stat.value}</p>
+                </Card>
+              ))}
+            </div>
+            <FarmerInsightsCharts
+              products={products}
+              orders={orders}
+              negotiations={negotiations}
+              logisticsRequests={logisticsRequests}
+            />
+
+            <div className="mt-6">
+              <Card>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-lg font-semibold">Buyer Reviews</p>
+                  {averageReviewRating && (
+                    <p className="text-sm font-medium text-text-muted">
+                      Avg rating: <span className="text-amber-600">{averageReviewRating} / 5</span>
+                    </p>
+                  )}
+                </div>
+
+                {reviewsLoading && <p className="text-sm text-text-muted">Loading reviews...</p>}
+                {!reviewsLoading && recentReviews.length === 0 && (
+                  <p className="text-sm text-text-muted">No buyer reviews yet.</p>
+                )}
+
+                {!reviewsLoading && recentReviews.length > 0 && (
+                  <div className="space-y-3">
+                    {recentReviews.map((review) => {
+                      const ratingValue = Number(review.rating) || 0
+                      const stars = `${'★'.repeat(ratingValue)}${'☆'.repeat(Math.max(0, 5 - ratingValue))}`
+
+                      return (
+                        <div key={review.id} className="rounded-[12px] border border-border px-3 py-2">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="font-medium">{review.reviewer_name || `Buyer #${review.reviewer}`}</p>
+                              <p className="text-xs text-text-muted">
+                                Order #{review.order} | {review.product_name || 'Product'} | {review.order_quantity || 0} kg
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-amber-600">{stars}</p>
+                              <p className="text-xs text-text-muted">{formatReviewDate(review.created_at)}</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-sm text-text-primary">{review.comment || 'No written feedback.'}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'market-intelligence' && (
+          <div className="mt-4">
+            <MarketIntelligence embedded />
+          </div>
+        )}
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {activeTab === 'orders-logistics' && (
+          <>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
           <Card>
             <p className="mb-4 text-lg font-semibold">Active Listings</p>
             {deleteError && <div className="mb-3 rounded-[12px] bg-red-50 p-2 text-xs text-red-600">{deleteError}</div>}
             {loading && <p className="text-sm text-text-muted">Loading listings...</p>}
             {!loading && recentListings.length === 0 && <p className="text-sm text-text-muted">No listings yet.</p>}
             {!loading && recentListings.length > 0 && (
-              <div className="space-y-3">
+              <div className="h-[23rem] space-y-3 overflow-y-auto pr-1">
                 {recentListings.map((product) => (
                   <div
                     key={product.id}
@@ -727,7 +898,7 @@ export default function FarmerDashboardPage() {
               <p className="text-sm text-text-muted">No negotiations yet.</p>
             )}
             {!loading && recentNegotiations.length > 0 && (
-              <div className="space-y-3">
+              <div className="h-[23rem] space-y-3 overflow-y-auto pr-1">
                 {recentNegotiations.map((negotiation) => (
                   <div
                     key={negotiation.id}
@@ -798,7 +969,7 @@ export default function FarmerDashboardPage() {
               <p className="text-sm text-text-muted">No orders yet.</p>
             )}
             {!loading && recentOrders.length > 0 && (
-              <div className="space-y-3">
+              <div className="h-[23rem] space-y-3 overflow-y-auto pr-1">
                 {recentOrders.map((order) => (
                   <div
                     key={order.id}
@@ -838,9 +1009,9 @@ export default function FarmerDashboardPage() {
               </div>
             )}
           </Card>
-        </div>
+            </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
           <Card>
             <p className="mb-4 text-lg font-semibold">Request Logistics</p>
 
@@ -1031,7 +1202,9 @@ export default function FarmerDashboardPage() {
               </div>
             )}
           </Card>
-        </div>
+            </div>
+          </>
+        )}
       </PageShell>
 
       {showPaymentAnimation && (
@@ -1052,6 +1225,7 @@ export default function FarmerDashboardPage() {
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleAddProduct} loading={isSubmitting} />
 
       <EditProductModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSubmit={handleEditProduct} loading={isSubmitting} product={editingProduct} />
+      <FarmerAIAssistant />
     </>
   )
 }

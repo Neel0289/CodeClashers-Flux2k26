@@ -1,4 +1,3 @@
-from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -14,6 +13,35 @@ def build_unique_username(email: str) -> str:
         username = f"{base_username}{count}"
         count += 1
     return username
+
+
+def normalize_email_for_lookup(email: str) -> str:
+    email = str(email or '').strip().lower()
+    if '@' not in email:
+        return email
+
+    local_part, domain = email.split('@', 1)
+    if domain not in {'gmail.com', 'googlemail.com'}:
+        return email
+
+    local_part = local_part.split('+', 1)[0].replace('.', '')
+    return f"{local_part}@gmail.com"
+
+
+def find_user_for_email_login(email: str):
+    user = User.objects.filter(email__iexact=email).first()
+    if user:
+        return user
+
+    normalized = normalize_email_for_lookup(email)
+    if normalized.endswith('@gmail.com'):
+        gmail_candidates = User.objects.filter(email__iendswith='@gmail.com')
+        googlemail_candidates = User.objects.filter(email__iendswith='@googlemail.com')
+        for candidate in list(gmail_candidates) + list(googlemail_candidates):
+            if normalize_email_for_lookup(candidate.email) == normalized:
+                return candidate
+
+    return None
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -114,15 +142,20 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         email = attrs['email'].strip().lower()
         password = attrs['password']
-        user = User.objects.filter(email__iexact=email).first()
+        user = find_user_for_email_login(email)
         if not user:
             raise serializers.ValidationError('Invalid credentials.')
 
-        authed = authenticate(username=user.username, password=password)
-        if not authed:
+        if not user.is_active:
+            raise serializers.ValidationError('This account is inactive.')
+
+        if not user.has_usable_password():
+            raise serializers.ValidationError('This account has no password set. Use Google Sign in.')
+
+        if not user.check_password(password):
             raise serializers.ValidationError('Invalid credentials.')
 
-        attrs['user'] = authed
+        attrs['user'] = user
         return attrs
 
 

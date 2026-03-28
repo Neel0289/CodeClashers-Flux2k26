@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 
 import razorpay
 from django.conf import settings
@@ -171,16 +172,47 @@ class ReviewListCreateAPIView(APIView):
 		return Response(ReviewSerializer(queryset, many=True).data)
 
 	def post(self, request):
-		order = Order.objects.get(pk=request.data['order_id'])
-		if order.status != 'completed':
-			return Response({'detail': 'Reviews are allowed only after completion.'}, status=status.HTTP_400_BAD_REQUEST)
-		if request.user.id not in [order.buyer_id, order.farmer_id]:
-			raise PermissionDenied('Not allowed.')
+		order_id = request.data.get('order_id') or request.data.get('order')
+		if not order_id:
+			return Response({'detail': 'order_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-		serializer = ReviewSerializer(data=request.data)
-		serializer.is_valid(raise_exception=True)
-		serializer.save(reviewer=request.user)
-		return Response(serializer.data, status=status.HTTP_201_CREATED)
+		try:
+			order = Order.objects.get(pk=order_id)
+		except Order.DoesNotExist:
+			return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+		if request.user.id != order.buyer_id:
+			raise PermissionDenied('Only buyer can submit this review.')
+
+		if order.status not in {'delivered', 'completed'}:
+			return Response({'detail': 'Review is allowed only after delivery.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		review_deadline = order.updated_at + timedelta(days=3)
+		if timezone.now() > review_deadline:
+			return Response({'detail': 'Review window expired. Reviews must be submitted within 3 days after delivery.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		if Review.objects.filter(order=order, reviewer=request.user).exists():
+			return Response({'detail': 'You already submitted a review for this order.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		rating = request.data.get('rating')
+		comment = request.data.get('comment', '')
+
+		try:
+			rating_value = int(rating)
+		except (TypeError, ValueError):
+			return Response({'detail': 'rating must be an integer between 1 and 5.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		if rating_value < 1 or rating_value > 5:
+			return Response({'detail': 'rating must be between 1 and 5.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		review = Review.objects.create(
+			order=order,
+			reviewer=request.user,
+			reviewee=order.farmer,
+			rating=rating_value,
+			comment=comment,
+		)
+		return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
 
 
 class LogisticsQuoteCheckoutCreateAPIView(APIView):

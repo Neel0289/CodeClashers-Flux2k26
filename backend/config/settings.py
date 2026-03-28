@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.logistics',
     'apps.payments',
+    'apps.market_prices',
 ]
 
 MIDDLEWARE = [
@@ -164,3 +165,7 @@ FIREBASE_ADMIN_CREDENTIAL_PATH = os.environ.get(
     'FIREBASE_ADMIN_CREDENTIAL_PATH',
     str(BASE_DIR.parent / 'fluxfirebase.json'),
 )
+
+DATA_GOV_API_KEY = os.environ.get('DATA_GOV_API_KEY', '')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
