@@ -47,6 +47,16 @@ export default function ListingForm({ onSubmit }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target
+
+    if (name === 'quantity_available') {
+      if (value === '') {
+        setFormData((prev) => ({ ...prev, quantity_available: '' }))
+      } else {
+        setFormData((prev) => ({ ...prev, quantity_available: String(Math.max(0, Number(value))) }))
+      }
+      return
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
@@ -113,7 +123,7 @@ export default function ListingForm({ onSubmit }) {
           </div>
           <div className="col-span-1">
             <label className={labelCls}>Quantity</label>
-            <input name="quantity_available" type="number" value={formData.quantity_available} onChange={handleChange} placeholder="0" className={inputCls} required />
+            <input name="quantity_available" type="number" min="0" value={formData.quantity_available} onChange={handleChange} placeholder="0" className={inputCls} required />
           </div>
           <div className="col-span-1">
             <label className={labelCls}>Unit</label>

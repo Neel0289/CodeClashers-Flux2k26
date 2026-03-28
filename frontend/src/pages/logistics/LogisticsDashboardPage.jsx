@@ -1,5 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
+  Tooltip,
+} from 'chart.js'
 import { CircleMarker, MapContainer, Polyline, TileLayer, useMapEvents } from 'react-leaflet'
+import { Bar, Doughnut } from 'react-chartjs-2'
 import { useNavigate } from 'react-router-dom'
 
 import { getLogisticsRequests, quoteRequest } from '../../api/logistics'
@@ -12,6 +22,8 @@ import { openInvoiceWindow } from '../../utils/invoice'
 
 const INDIA_CENTER = [22.9734, 78.6569]
 const geocodeCache = new Map()
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
 function RouteMapPicker({ onPick }) {
   useMapEvents({
@@ -28,12 +40,51 @@ function formatStatus(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function calculateDistanceKm(start, end) {
+  if (!start || !end) return null
+
+  const toRad = (value) => (value * Math.PI) / 180
+  const earthRadiusKm = 6371
+  const dLat = toRad(end.lat - start.lat)
+  const dLon = toRad(end.lon - start.lon)
+  const lat1 = toRad(start.lat)
+  const lat2 = toRad(end.lat)
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2)
+    + Math.cos(lat1) * Math.cos(lat2)
+    * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return earthRadiusKm * c
+}
+
+const formatInr = (value) => new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+}).format(Number(value || 0))
+
 export default function LogisticsDashboardPage() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
 
   const profile = user?.profile || {}
   const operatingStates = Array.isArray(profile.operating_states) ? profile.operating_states : []
+  const profileVehicles = useMemo(() => {
+    const vehicles = Array.isArray(profile.vehicles) ? profile.vehicles : []
+    if (vehicles.length > 0) return vehicles
+
+    // Backward compatibility for old profiles that still store one vehicle.
+    return [
+      {
+        vehicle_type: profile.vehicle_type || '',
+        max_weight_capacity: profile.max_weight_kg || 0,
+        operating_states: operatingStates,
+        vehicle_number: '',
+      },
+    ]
+  }, [profile.vehicles, profile.vehicle_type, profile.max_weight_kg, operatingStates])
   const [routeDraft, setRouteDraft] = useState({ start: null, end: null })
   const [mapAddressLoading, setMapAddressLoading] = useState(false)
   const [routeError, setRouteError] = useState('')
@@ -45,6 +96,151 @@ export default function LogisticsDashboardPage() {
   const [selectedRequestId, setSelectedRequestId] = useState(null)
   const [quoteModalRequest, setQuoteModalRequest] = useState(null)
   const [quoteValue, setQuoteValue] = useState('')
+
+  const routeDistanceKm = useMemo(
+    () => calculateDistanceKm(routeDraft.start, routeDraft.end),
+    [routeDraft.start, routeDraft.end],
+  )
+
+  const revenueChartData = useMemo(() => {
+    const totalsByStatus = new Map()
+
+    requests.forEach((request) => {
+      const status = formatStatus(request.status)
+      const quotedFee = Number(request.quoted_fee || 0)
+      if (!Number.isFinite(quotedFee) || quotedFee <= 0) return
+      totalsByStatus.set(status, (totalsByStatus.get(status) || 0) + quotedFee)
+    })
+
+    const labels = Array.from(totalsByStatus.keys())
+    const values = labels.map((label) => Number(totalsByStatus.get(label) || 0))
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Revenue (INR)',
+          data: values,
+          backgroundColor: ['#16a34a', '#2563eb', '#f59e0b', '#14b8a6', '#8b5cf6'],
+          borderRadius: 8,
+        },
+      ],
+    }
+  }, [requests])
+
+  const totalRevenue = useMemo(
+    () => requests.reduce((sum, request) => sum + (Number(request.quoted_fee) || 0), 0),
+    [requests],
+  )
+  const totalRequestCount = requests.length
+
+  const placesChartData = useMemo(() => {
+    const ordersPerPlace = new Map()
+
+    requests.forEach((request) => {
+      const place = `${request.drop_city || 'Unknown'}, ${request.drop_state || 'Unknown'}`
+      const current = ordersPerPlace.get(place) || new Set()
+      current.add(Number(request.order))
+      ordersPerPlace.set(place, current)
+    })
+
+    const sorted = Array.from(ordersPerPlace.entries())
+      .map(([place, orderIds]) => ({ place, count: orderIds.size }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+
+    return {
+      labels: sorted.map((row) => row.place),
+      datasets: [
+        {
+          label: 'Orders',
+          data: sorted.map((row) => row.count),
+          backgroundColor: ['#15803d', '#0f766e', '#1d4ed8', '#f59e0b', '#7c3aed', '#db2777'],
+          borderWidth: 0,
+        },
+      ],
+    }
+  }, [requests])
+
+  const topDestination = useMemo(
+    () => (placesChartData.labels[0] ? String(placesChartData.labels[0]) : 'N/A'),
+    [placesChartData.labels],
+  )
+
+  const revenueChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: {
+      duration: 900,
+      easing: 'easeOutQuart',
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          color: '#4b5563',
+          font: { size: 12, weight: 600 },
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: 'rgba(148, 163, 184, 0.24)',
+          borderDash: [4, 4],
+        },
+        ticks: {
+          color: '#6b7280',
+          font: { size: 11 },
+        },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.92)',
+        titleColor: '#f9fafb',
+        bodyColor: '#e5e7eb',
+        cornerRadius: 10,
+        padding: 10,
+        callbacks: {
+          label: (context) => `Revenue: ${formatInr(context.parsed.y)}`,
+        },
+      },
+    },
+  }), [])
+
+  const placesChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: {
+      duration: 1000,
+      easing: 'easeOutCubic',
+    },
+    cutout: '54%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: '#374151',
+          usePointStyle: true,
+          pointStyle: 'circle',
+          boxWidth: 10,
+          padding: 14,
+          font: { size: 12, weight: 600 },
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        titleColor: '#f8fafc',
+        bodyColor: '#e2e8f0',
+        cornerRadius: 10,
+        padding: 10,
+        callbacks: {
+          label: (context) => `${context.label}: ${context.parsed} orders`,
+        },
+      },
+    },
+  }), [])
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -263,9 +459,25 @@ export default function LogisticsDashboardPage() {
           <p className="mb-4 text-lg font-semibold">Logistics Profile</p>
           <div className="space-y-2 text-sm text-text-primary">
             <p><span className="font-medium">Name:</span> {user?.first_name || '-'}</p>
-            <p><span className="font-medium">Vehicle Type:</span> {profile.vehicle_type || '-'}</p>
-            <p><span className="font-medium">Max Weight Capacity:</span> {profile.max_weight_kg || 0} kg</p>
-            <p><span className="font-medium">Operating States:</span> {operatingStates.length ? operatingStates.join(', ') : '-'}</p>
+            <div className="space-y-2">
+              <p><span className="font-medium">Vehicles:</span></p>
+              <div className="space-y-2">
+                {profileVehicles.map((vehicle, index) => {
+                  const states = Array.isArray(vehicle?.operating_states) ? vehicle.operating_states : []
+                  const capacity = vehicle?.max_weight_capacity ?? vehicle?.max_weight_kg ?? 0
+                  return (
+                    <div key={`vehicle-${index}`} className="rounded-[10px] border border-border bg-surface-2 px-3 py-2">
+                      <p><span className="font-medium">#{index + 1}</span> {formatStatus(vehicle?.vehicle_type || '-')}</p>
+                      {vehicle?.vehicle_number ? (
+                        <p><span className="font-medium">Vehicle Number:</span> {vehicle.vehicle_number}</p>
+                      ) : null}
+                      <p><span className="font-medium">Max Weight Capacity:</span> {capacity} kg</p>
+                      <p><span className="font-medium">Operating States:</span> {states.length ? states.join(', ') : '-'}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -276,6 +488,56 @@ export default function LogisticsDashboardPage() {
             <p><span className="font-medium">Total Deliveries:</span> {profile.total_deliveries || 0}</p>
             <p><span className="font-medium">Account Email:</span> {user?.email || '-'}</p>
             <p><span className="font-medium">Phone:</span> {user?.phone || '-'}</p>
+          </div>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <p className="mb-4 text-lg font-semibold">Analytics</p>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-3 py-2">
+              <p className="text-xs uppercase tracking-wider text-emerald-700">Total Revenue</p>
+              <p className="text-lg font-bold text-emerald-900">{formatInr(totalRevenue)}</p>
+            </div>
+            <div className="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white px-3 py-2">
+              <p className="text-xs uppercase tracking-wider text-sky-700">Incoming Requests</p>
+              <p className="text-lg font-bold text-sky-900">{totalRequestCount}</p>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-3 py-2">
+              <p className="text-xs uppercase tracking-wider text-violet-700">Top Destination</p>
+              <p className="text-base font-bold text-violet-900">{topDestination}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-[12px] border border-border bg-gradient-to-b from-white to-slate-50 p-4 shadow-sm">
+              <p className="text-sm font-medium text-text-primary">Total Revenue by Request Status</p>
+              <p className="text-xs text-text-muted">Status-wise quoted fee breakdown</p>
+              <div className="mt-3 h-64">
+                {revenueChartData.labels.length > 0 ? (
+                  <Bar
+                    data={revenueChartData}
+                    options={revenueChartOptions}
+                  />
+                ) : (
+                  <p className="text-sm text-text-muted">No revenue data available yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[12px] border border-border bg-gradient-to-b from-white to-slate-50 p-4 shadow-sm">
+              <p className="text-sm font-medium text-text-primary">Places With Most Orders</p>
+              <p className="text-xs text-text-muted">Based on unique order destinations</p>
+              <div className="mt-3 h-64">
+                {placesChartData.labels.length > 0 ? (
+                  <Doughnut
+                    data={placesChartData}
+                    options={placesChartOptions}
+                  />
+                ) : (
+                  <p className="text-sm text-text-muted">No destination data available yet.</p>
+                )}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -403,6 +665,11 @@ export default function LogisticsDashboardPage() {
               <p className="font-medium">Ending Point</p>
               <p>{routeDraft.end ? `${routeDraft.end.city || '-'}, ${routeDraft.end.state || '-'}` : 'Not selected'}</p>
             </div>
+          </div>
+
+          <div className="mt-2 text-sm text-text-primary">
+            <p className="font-medium">Approx Distance Between Places</p>
+            <p>{routeDistanceKm ? `~${routeDistanceKm.toFixed(1)} km` : 'Approx distance will appear once both points are selected.'}</p>
           </div>
 
           {routeError && <p className="mt-2 text-sm text-red-600">{routeError}</p>}

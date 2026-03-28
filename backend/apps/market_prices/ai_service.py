@@ -61,7 +61,7 @@ def _build_system_prompt():
         '• Negotiations: counter-offer prices, accept/reject farmer offers\n'
         '• Logistics Request Flow: select logistics partner, verify pickup/drop details, request quotes, accept/decline fees, track pickup/delivery status\n'
         '• Reviews: rate farmers after order delivery (3-day window), view farmer ratings\n'
-        '• Payments: secure checkout via Razorpay, invoices (order invoice + logistics invoice)\n'
+        '• Payments: secure checkout via Google Pay demo flow, invoices (order invoice + logistics invoice)\n'
         '• Chat: direct messaging with farmers on confirmed orders\n'
         '• Sell Fast Alerts: farmers can send urgent sell requests to notify all interested buyers\n'
         '\n'
@@ -181,17 +181,17 @@ def _build_contextual_fallback(message, context_block):
             "4. Submit negotiation request.\n"
             "5. Farmer will counter-offer or accept your price.\n"
             "6. Once accepted by both, order becomes 'confirmed'.\n"
-            "7. You can then request logistics and initiate payment via Razorpay.\n\n"
+            "7. You can then request logistics and initiate payment via Google Pay demo flow.\n\n"
             "💡 Pricing tip: Check Market Intelligence for mandi modal rates first to understand fair market price."
         )
 
     # Orders & Invoices questions
-    if any(token in question for token in ['order', 'invoice', 'payment', 'razorpay', 'checkout', 'bill', 'purchase', 'how to place order']):
+    if any(token in question for token in ['order', 'invoice', 'payment', 'google pay', 'gpay', 'checkout', 'bill', 'purchase', 'how to place order']):
         return (
             "How to place an order and generate invoices:\n"
             "1. Find a crop in listings or Market Intelligence.\n"
             "2. Click 'Place Order' and choose Direct Order or Negotiate Price.\n"
-            "3. Once confirmed, complete secure Razorpay payment.\n"
+            "3. Once confirmed, complete secure Google Pay demo payment.\n"
             "4. Order status changes to 'confirmed'.\n"
             "5. Generate order invoice: click 'Invoice' button in Recent Orders.\n"
             "6. Once logistics is assigned and quoted, click 'Logistic Invoice' to download logistics bill.\n"

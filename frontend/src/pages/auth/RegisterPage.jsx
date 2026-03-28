@@ -24,6 +24,15 @@ const CERTIFICATE_OPTIONS = [
   { value: 'farmer_registry', label: 'Farmer Registry' },
 ]
 
+const INDIAN_VEHICLE_NUMBER_REGEX = /^(?:[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{4}|\d{2}\s?BH\s?\d{4}\s?[A-Z]{1,2})$/
+
+const createEmptyLogisticsVehicle = () => ({
+  vehicle_type: 'truck',
+  operating_area: '',
+  max_capacity: '',
+  vehicle_number: '',
+})
+
 function LocationPicker({ onPick }) {
   useMapEvents({
     click(event) {
@@ -88,7 +97,7 @@ export default function RegisterPage() {
   const [passbookPhoto, setPassbookPhoto] = useState(null)
   const [passbookPhotoPreview, setPassbookPhotoPreview] = useState('')
   const [selectedCertificates, setSelectedCertificates] = useState([])
-  const [selectedVehicles, setSelectedVehicles] = useState([])
+  const [logisticsVehicles, setLogisticsVehicles] = useState([createEmptyLogisticsVehicle()])
   const [isScanning, setIsScanning] = useState(false)
   const [bankDetails, setBankDetails] = useState({
     holder: '',
@@ -136,6 +145,22 @@ export default function RegisterPage() {
     )
   }
 
+  const updateLogisticsVehicle = (index, field, value) => {
+    setLogisticsVehicles((prev) => prev.map((vehicle, i) => {
+      if (i !== index) return vehicle
+      const nextValue = field === 'vehicle_number' ? String(value).toUpperCase() : value
+      return { ...vehicle, [field]: nextValue }
+    }))
+  }
+
+  const addLogisticsVehicle = () => {
+    setLogisticsVehicles((prev) => [...prev, createEmptyLogisticsVehicle()])
+  }
+
+  const removeLogisticsVehicle = (index) => {
+    setLogisticsVehicles((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const requestCurrentLocation = (target) => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported in this browser.')
@@ -175,17 +200,23 @@ export default function RegisterPage() {
     const formEl = event.currentTarget
     const formData = new FormData(formEl)
 
-    // For farmer: use mobile as username/email equivalent
+    // For farmer: validate shared login fields and map farm coordinates
     if (role === 'farmer') {
-      const mobile = String(formData.get('mobile') || '').trim()
-      if (!mobile || mobile.length < 10) {
+      const phone = String(formData.get('phone') || '').trim()
+      const email = String(formData.get('email') || '').trim()
+
+      if (!email) {
+        setError('Please enter a valid email address.')
+        setSubmitting(false)
+        return
+      }
+
+      if (!phone || phone.length < 10) {
         setError('Please enter a valid 10-digit mobile number.')
         setSubmitting(false)
         return
       }
-      // Generate a placeholder email from mobile so backend validation passes
-      formData.set('email', `${mobile}@khetbazar.farmer`)
-      formData.set('phone', mobile)
+      formData.set('phone', phone)
 
       // Attach coordinates
       if (!farmCoords.latitude || !farmCoords.longitude) {
@@ -231,24 +262,50 @@ export default function RegisterPage() {
       if (buyerPhoto) formData.set('buyer_photo', buyerPhoto)
     }
 
-    const operating_states = formData.get('operating_states')
-    if (operating_states) {
-      formData.set('operating_states', JSON.stringify(
-        String(operating_states).split(',').map((s) => s.trim()).filter(Boolean)
-      ))
-    }
-
     if (role === 'logistics') {
-      const vehicles = [...selectedVehicles]
-      if (vehicles.includes('other')) {
-        const otherVal = formData.get('custom_vehicle_type')
-        if (otherVal) {
-          const idx = vehicles.indexOf('other')
-          vehicles[idx] = otherVal
+      const cleanedVehicles = logisticsVehicles.map((vehicle) => ({
+        vehicle_type: String(vehicle.vehicle_type || '').trim().toLowerCase(),
+        operating_area: String(vehicle.operating_area || '').trim(),
+        max_capacity: Number(vehicle.max_capacity),
+        vehicle_number: String(vehicle.vehicle_number || '').trim().toUpperCase(),
+      }))
+
+      if (!cleanedVehicles.length) {
+        setError('Please add at least one vehicle.')
+        setSubmitting(false)
+        return
+      }
+
+      for (let i = 0; i < cleanedVehicles.length; i += 1) {
+        const vehicle = cleanedVehicles[i]
+        if (!vehicle.vehicle_type || !vehicle.operating_area || !vehicle.vehicle_number || !vehicle.max_capacity || vehicle.max_capacity <= 0) {
+          setError(`Please complete all fields for Vehicle ${i + 1}.`)
+          setSubmitting(false)
+          return
+        }
+
+        if (!INDIAN_VEHICLE_NUMBER_REGEX.test(vehicle.vehicle_number)) {
+          setError(`Vehicle ${i + 1} number is invalid. Use Indian format like MH12AB1234.`)
+          setSubmitting(false)
+          return
         }
       }
-      formData.set('vehicle_type', JSON.stringify(vehicles))
-      formData.delete('custom_vehicle_type')
+
+      const allOperatingStates = [...new Set(
+        cleanedVehicles.flatMap((vehicle) => vehicle.operating_area.split(',').map((s) => s.trim()).filter(Boolean))
+      )]
+
+      const payloadVehicles = cleanedVehicles.map((vehicle) => ({
+        vehicle_type: vehicle.vehicle_type,
+        vehicle_number: vehicle.vehicle_number,
+        max_weight_capacity: vehicle.max_capacity,
+        operating_states: vehicle.operating_area.split(',').map((s) => s.trim()).filter(Boolean),
+      }))
+
+      formData.set('vehicles', JSON.stringify(payloadVehicles))
+      formData.set('vehicle_type', payloadVehicles[0].vehicle_type)
+      formData.set('max_weight_capacity', String(payloadVehicles[0].max_weight_capacity))
+      formData.set('operating_states', JSON.stringify(allOperatingStates))
 
       // Attach bank details
       formData.set('bank_account_holder', bankDetails.holder)
@@ -321,6 +378,8 @@ export default function RegisterPage() {
             {/* ── Common fields ──────────────────────────────────────────── */}
             {/* ── Basic Information ──────────────────────────────────── */}
             <SectionHeading>Account Security</SectionHeading>
+            <Input name="email" type="email" placeholder="Email address" required />
+            <Input name="phone" type="tel" placeholder="Phone number" maxLength={10} required />
             <Input name="password" type="password" placeholder="Create password" required />
 
             {/* ── FARMER fields ─────────────────────────────────────────── */}
@@ -328,7 +387,6 @@ export default function RegisterPage() {
               <>
                 <SectionHeading>Basic Information</SectionHeading>
                 <Input name="name" placeholder="Full name" required />
-                <Input name="mobile" type="tel" placeholder="Mobile number (used to login)" maxLength={10} required />
                 {/* Farmer photo */}
                 <SectionHeading>Profile & Photo</SectionHeading>
                 <PhotoUpload
@@ -436,18 +494,12 @@ export default function RegisterPage() {
             {role === 'buyer' && (
               <>
                 <SectionHeading>Personal Details</SectionHeading>
+                <Input name="name" placeholder="Full name" required />
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Input name="name" placeholder="Full name" required />
-                  <Input name="phone" type="tel" placeholder="Phone number" required />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input name="email" type="email" placeholder="Email address" required />
                   <Input name="aadhaar_number" placeholder="Aadhaar Number (12 digits)" maxLength={12} required />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input name="address" placeholder="Full Address" required />
                   <Input name="district" placeholder="District" required />
                 </div>
+                <Input name="address" placeholder="Full Address" required />
                 <PhotoUpload
                   label="Profile Photo *"
                   name="buyer_photo_file"
@@ -519,40 +571,64 @@ export default function RegisterPage() {
               <>
                 <SectionHeading>Basic Information</SectionHeading>
                 <Input name="name" placeholder="Full name" required />
-                <Input name="email" type="email" placeholder="Email address" required />
-                <Input name="phone" type="tel" placeholder="Phone number" required />
 
                 <SectionHeading>Vehicle Details</SectionHeading>
-                <div className="grid grid-cols-2 gap-3 mb-2">
-                  {['bike', 'tempo', 'truck', 'other'].map((v) => (
-                    <label
-                      key={v}
-                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${
-                        selectedVehicles.includes(v)
-                          ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                          : 'border-border bg-white hover:border-accent/40'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 accent-accent"
-                        checked={selectedVehicles.includes(v)}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedVehicles([...selectedVehicles, v])
-                          else setSelectedVehicles(selectedVehicles.filter((i) => i !== v))
-                        }}
-                      />
-                      <span className="text-sm font-medium capitalize text-text-primary">{v}</span>
-                    </label>
+                <div className="space-y-3">
+                  {logisticsVehicles.map((vehicle, index) => (
+                    <div key={`vehicle-${index}`} className="rounded-xl border border-border bg-white p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-semibold text-text-primary">Vehicle {index + 1}</p>
+                        {logisticsVehicles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLogisticsVehicle(index)}
+                            className="text-xs font-semibold text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <select
+                          value={vehicle.vehicle_type}
+                          onChange={(e) => updateLogisticsVehicle(index, 'vehicle_type', e.target.value)}
+                          className={inputCls}
+                          required
+                        >
+                          <option value="bike">Bike</option>
+                          <option value="tempo">Tempo</option>
+                          <option value="truck">Truck</option>
+                        </select>
+                        <Input
+                          placeholder="Vehicle number (e.g., MH12AB1234)"
+                          value={vehicle.vehicle_number}
+                          onChange={(e) => updateLogisticsVehicle(index, 'vehicle_number', e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <Input
+                          placeholder="Where it operates (comma separated states)"
+                          value={vehicle.operating_area}
+                          onChange={(e) => updateLogisticsVehicle(index, 'operating_area', e.target.value)}
+                          required
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          placeholder="Max capacity (kg)"
+                          value={vehicle.max_capacity}
+                          onChange={(e) => updateLogisticsVehicle(index, 'max_capacity', e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
-
-                {selectedVehicles.includes('other') && (
-                  <Input name="custom_vehicle_type" placeholder="Specify your other vehicle(s)" required />
-                )}
-
-                <Input name="max_weight_capacity" type="number" min="1" step="1" placeholder="Max weight capacity (kg)" required />
-                <Input name="operating_states" placeholder="Operating states (comma separated)" required />
+                <Button type="button" className="w-full" onClick={addLogisticsVehicle}>
+                  + Add another vehicle
+                </Button>
 
                 <SectionHeading>Bank Details</SectionHeading>
                 {isScanning && (

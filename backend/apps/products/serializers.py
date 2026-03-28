@@ -12,3 +12,9 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'
         read_only_fields = ['farmer', 'created_at']
+
+    def validate_quantity_available(self, value):
+        quantity = float(value or 0)
+        if quantity < 0:
+            raise serializers.ValidationError('Quantity cannot be negative.')
+        return value

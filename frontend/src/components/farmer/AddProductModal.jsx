@@ -40,6 +40,17 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
 
   const handleChange = (e) => {
     const { name, value } = e.target
+
+    if (name === 'quantity_available') {
+      if (value === '') {
+        setFormData((prev) => ({ ...prev, quantity_available: '' }))
+      } else {
+        setFormData((prev) => ({ ...prev, quantity_available: String(Math.max(0, Number(value))) }))
+      }
+      setError('')
+      return
+    }
+
     setFormData((prev) => {
       if (name === 'category') {
         return {
@@ -60,6 +71,11 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
     // Validation
     if (!formData.name || !formData.description || !formData.base_price || !formData.quantity_available || !formData.harvest_date) {
       setError('All fields are required.')
+      return
+    }
+
+    if (Number(formData.quantity_available) < 0) {
+      setError('Quantity cannot be negative.')
       return
     }
 
@@ -138,7 +154,7 @@ export default function AddProductModal({ isOpen, onClose, onSubmit, loading }) 
               </div>
               <div className="col-span-1">
                 <label className={labelCls}>Quantity</label>
-                <input type="number" step="1" name="quantity_available" value={formData.quantity_available} onChange={handleChange} placeholder="0" className={inputCls} required />
+                <input type="number" step="1" min="0" name="quantity_available" value={formData.quantity_available} onChange={handleChange} placeholder="0" className={inputCls} required />
               </div>
               <div className="col-span-1">
                 <label className={labelCls}>Unit</label>

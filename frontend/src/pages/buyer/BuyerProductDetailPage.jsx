@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { createOrder } from '../../api/orders'
 import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
+import FakeGooglePayModal from '../../components/shared/FakeGooglePayModal'
 import { getProduct } from '../../api/products'
 import Button from '../../components/shared/Button'
 import Input from '../../components/shared/Input'
@@ -17,6 +18,9 @@ export default function BuyerProductDetailPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [googlePayCheckout, setGooglePayCheckout] = useState(null)
+  const [googlePayProcessing, setGooglePayProcessing] = useState(false)
+  const [pendingOrderId, setPendingOrderId] = useState(null)
 
   useEffect(() => {
     let mounted = true
@@ -65,56 +69,53 @@ export default function BuyerProductDetailPage() {
       return
     }
 
-    if (!window.Razorpay) {
-      setError('Razorpay SDK failed to load. Refresh the page and try again.')
-      setSubmitting(false)
-      return
-    }
-
     try {
       const { data: order } = await createOrder({ product: Number(id), quantity: qty })
       const { data: checkout } = await createOrderCheckout(order.id)
-
-      const razorpay = new window.Razorpay({
-        key: checkout.key,
-        amount: checkout.amount,
-        currency: checkout.currency,
-        name: checkout.name,
-        description: checkout.description,
-        order_id: checkout.razorpay_order_id,
-        prefill: checkout.prefill,
-        theme: checkout.theme,
-        handler: async (response) => {
-          try {
-            await verifyOrderCheckout(order.id, {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            })
-            navigate(`/buyer/orders/${order.id}`)
-          } catch {
-            setError('Payment verification failed. Please contact support with your payment ID.')
-          } finally {
-            setSubmitting(false)
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setSubmitting(false)
-          },
-        },
-      })
-
-      razorpay.on('payment.failed', () => {
-        setError('Payment failed or was cancelled. You can try again from this page.')
-        setSubmitting(false)
-      })
-
-      razorpay.open()
+      setPendingOrderId(order.id)
+      setGooglePayCheckout(checkout)
+      setGooglePayProcessing(false)
+      setSubmitting(false)
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setError(detail || 'Unable to place order right now. Please try again.')
+      const data = err?.response?.data
+      const firstValidationError = data && typeof data === 'object'
+        ? Object.values(data).find((value) => typeof value === 'string' || (Array.isArray(value) && value.length > 0))
+        : null
+      const normalizedValidationError = Array.isArray(firstValidationError) ? firstValidationError[0] : firstValidationError
+      setError(detail || normalizedValidationError || 'Unable to place order right now. Please try again.')
       setSubmitting(false)
+    }
+  }
+
+  const cancelGooglePay = () => {
+    setGooglePayCheckout(null)
+    setGooglePayProcessing(false)
+    setPendingOrderId(null)
+    setError('Payment was cancelled before completion.')
+  }
+
+  const confirmGooglePay = async (payload) => {
+    if (!pendingOrderId || !googlePayCheckout?.checkout_token) return
+
+    setGooglePayProcessing(true)
+    setError('')
+    try {
+      await verifyOrderCheckout(pendingOrderId, {
+        checkout_token: googlePayCheckout.checkout_token,
+        gpay_reference: payload.gpay_reference,
+        upi_id: payload.upi_id,
+      })
+      setGooglePayCheckout((prev) => (prev ? { ...prev, status: 'success' } : prev))
+      setGooglePayProcessing(false)
+      setTimeout(() => {
+        setGooglePayCheckout(null)
+        navigate(`/buyer/orders/${pendingOrderId}`)
+      }, 1200)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setError(detail || 'Payment could not be completed. Please try again.')
+      setGooglePayProcessing(false)
     }
   }
 
@@ -153,6 +154,15 @@ export default function BuyerProductDetailPage() {
           </Button>
         </div>
       </div>
+
+      <FakeGooglePayModal
+        isOpen={Boolean(googlePayCheckout)}
+        checkout={googlePayCheckout}
+        processing={googlePayProcessing}
+        error={error}
+        onCancel={cancelGooglePay}
+        onConfirm={confirmGooglePay}
+      />
     </PageShell>
   )
 }

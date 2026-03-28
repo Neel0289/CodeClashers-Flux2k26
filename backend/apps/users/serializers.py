@@ -1,8 +1,14 @@
+import json
+import re
+
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import BuyerProfile, FarmerProfile, LogisticsProfile, User
+
+
+INDIAN_VEHICLE_NUMBER_REGEX = re.compile(r'^(?:[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{4}|\d{2}\s?BH\s?\d{4}\s?[A-Z]{1,2})$')
 
 
 def build_unique_username(email: str) -> str:
@@ -28,12 +34,36 @@ def normalize_email_for_lookup(email: str) -> str:
     return f"{local_part}@gmail.com"
 
 
-def find_user_for_email_login(email: str):
-    user = User.objects.filter(email__iexact=email).first()
+def normalize_phone_for_lookup(phone: str) -> str:
+    digits = ''.join(char for char in str(phone or '') if char.isdigit())
+    if len(digits) >= 10:
+        return digits[-10:]
+    return digits
+
+
+def find_user_for_email_login(identifier: str):
+    identifier = str(identifier or '').strip()
+
+    # Allow direct phone login for farmer-style auth flows.
+    if '@' not in identifier:
+        normalized_phone = normalize_phone_for_lookup(identifier)
+        if normalized_phone:
+            # Prefer exact phone match first.
+            user = User.objects.filter(phone=normalized_phone).first()
+            if user:
+                return user
+
+            # Fallback for stored phone values like +91XXXXXXXXXX.
+            phone_candidates = User.objects.exclude(phone='').values_list('id', 'phone')
+            for user_id, phone in phone_candidates:
+                if normalize_phone_for_lookup(phone) == normalized_phone:
+                    return User.objects.filter(id=user_id).first()
+
+    user = User.objects.filter(email__iexact=identifier).first()
     if user:
         return user
 
-    normalized = normalize_email_for_lookup(email)
+    normalized = normalize_email_for_lookup(identifier)
     if normalized.endswith('@gmail.com'):
         gmail_candidates = User.objects.filter(email__iendswith='@gmail.com')
         googlemail_candidates = User.objects.filter(email__iendswith='@googlemail.com')
@@ -67,6 +97,7 @@ class RegisterSerializer(serializers.Serializer):
     vehicle_type = serializers.ChoiceField(choices=[('bike', 'Bike'), ('tempo', 'Tempo'), ('truck', 'Truck')], required=False)
     max_weight_capacity = serializers.FloatField(required=False)
     operating_states = serializers.ListField(child=serializers.CharField(), required=False)
+    vehicles = serializers.JSONField(required=False)
 
     def validate(self, attrs):
         attrs['email'] = attrs['email'].strip().lower()
@@ -74,6 +105,65 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({'email': 'An account with this email already exists.'})
 
         role = attrs['role']
+
+        if role == 'logistics':
+            vehicles = attrs.get('vehicles')
+
+            if isinstance(vehicles, str):
+                try:
+                    vehicles = json.loads(vehicles)
+                except json.JSONDecodeError as exc:
+                    raise serializers.ValidationError({'vehicles': 'Invalid vehicles JSON payload.'}) from exc
+
+            if not isinstance(vehicles, list) or not vehicles:
+                raise serializers.ValidationError({'vehicles': 'At least one vehicle is required for logistics registration.'})
+
+            normalized_vehicles = []
+            merged_operating_states = []
+
+            for idx, vehicle in enumerate(vehicles, start=1):
+                if not isinstance(vehicle, dict):
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} must be an object.'})
+
+                vehicle_type = str(vehicle.get('vehicle_type', '')).strip().lower()
+                vehicle_number = str(vehicle.get('vehicle_number', '')).strip().upper()
+                max_weight_capacity = vehicle.get('max_weight_capacity')
+                operating_states = vehicle.get('operating_states', [])
+
+                if vehicle_type not in {'bike', 'tempo', 'truck'}:
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} type must be bike, tempo, or truck.'})
+
+                if isinstance(operating_states, str):
+                    operating_states = [s.strip() for s in operating_states.split(',') if s.strip()]
+
+                if not isinstance(operating_states, list) or not operating_states:
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} operating states are required.'})
+
+                try:
+                    max_weight_capacity = float(max_weight_capacity)
+                except (TypeError, ValueError) as exc:
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} max capacity must be a number.'}) from exc
+
+                if max_weight_capacity <= 0:
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} max capacity must be greater than 0.'})
+
+                if not INDIAN_VEHICLE_NUMBER_REGEX.match(vehicle_number):
+                    raise serializers.ValidationError({'vehicles': f'Vehicle {idx} number is invalid. Use Indian format like MH12AB1234.'})
+
+                normalized_vehicle = {
+                    'vehicle_type': vehicle_type,
+                    'vehicle_number': vehicle_number,
+                    'max_weight_capacity': max_weight_capacity,
+                    'operating_states': operating_states,
+                }
+                normalized_vehicles.append(normalized_vehicle)
+                merged_operating_states.extend(operating_states)
+
+            attrs['vehicles'] = normalized_vehicles
+            attrs['vehicle_type'] = normalized_vehicles[0]['vehicle_type']
+            attrs['max_weight_capacity'] = normalized_vehicles[0]['max_weight_capacity']
+            attrs['operating_states'] = sorted(set(merged_operating_states))
+
         required_map = {
             'farmer': ['farm_name', 'farm_state', 'farm_city', 'farm_latitude', 'farm_longitude'],
             'buyer': ['business_name', 'business_type', 'state', 'city', 'buyer_latitude', 'buyer_longitude'],
@@ -125,6 +215,7 @@ class RegisterSerializer(serializers.Serializer):
                 vehicle_type=validated_data['vehicle_type'],
                 max_weight_kg=validated_data['max_weight_capacity'],
                 operating_states=validated_data['operating_states'],
+                vehicles=validated_data.get('vehicles', []),
             )
 
         return user
@@ -136,13 +227,13 @@ def get_token_payload(user):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs['email'].strip().lower()
+        identifier = str(attrs['email'] or '').strip()
         password = attrs['password']
-        user = find_user_for_email_login(email)
+        user = find_user_for_email_login(identifier)
         if not user:
             raise serializers.ValidationError('Invalid credentials.')
 
@@ -174,7 +265,7 @@ class BuyerProfileSerializer(serializers.ModelSerializer):
 class LogisticsProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = LogisticsProfile
-        fields = ['vehicle_type', 'max_weight_kg', 'operating_states', 'rating', 'total_deliveries']
+        fields = ['vehicle_type', 'max_weight_kg', 'operating_states', 'vehicles', 'rating', 'total_deliveries']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

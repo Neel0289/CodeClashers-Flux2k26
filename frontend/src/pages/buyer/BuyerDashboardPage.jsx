@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -7,7 +7,7 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useNavigate } from 'react-router-dom'
 
 import { createNegotiation, getNegotiations, respondNegotiation } from '../../api/negotiations'
-import { getSellFastAlerts } from '../../api/alerts'
+import { buySellFastAlert, getSellFastAlerts } from '../../api/alerts'
 import { getLogisticsRequests } from '../../api/logistics'
 import { createOrder, getOrders } from '../../api/orders'
 import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
@@ -16,6 +16,7 @@ import { createReview } from '../../api/reviews'
 import Button from '../../components/shared/Button'
 import BuyerFarmerChatWidget from '../../components/shared/BuyerFarmerChatWidget'
 import Card from '../../components/shared/Card'
+import FakeGooglePayModal from '../../components/shared/FakeGooglePayModal'
 import Input from '../../components/shared/Input'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
@@ -112,6 +113,9 @@ export default function BuyerDashboardPage() {
   const [orderFormError, setOrderFormError] = useState('')
   const [showOrderAnimation, setShowOrderAnimation] = useState(false)
   const [orderAnimationMessage, setOrderAnimationMessage] = useState('Preparing your order...')
+  const [googlePayCheckout, setGooglePayCheckout] = useState(null)
+  const [googlePayProcessing, setGooglePayProcessing] = useState(false)
+  const [googlePayError, setGooglePayError] = useState('')
   const [counterOffers, setCounterOffers] = useState({})
   const [negotiationActionId, setNegotiationActionId] = useState(null)
   const [reviewTarget, setReviewTarget] = useState(null)
@@ -123,6 +127,11 @@ export default function BuyerDashboardPage() {
   const [logisticsRequests, setLogisticsRequests] = useState([])
   const [sellFastAlerts, setSellFastAlerts] = useState([])
   const [alertsLoading, setAlertsLoading] = useState(true)
+  const [sellFastBuyTarget, setSellFastBuyTarget] = useState(null)
+  const [sellFastBuyQuantity, setSellFastBuyQuantity] = useState('')
+  const [sellFastBuyError, setSellFastBuyError] = useState('')
+  const [sellFastBuyLoading, setSellFastBuyLoading] = useState(false)
+  const pendingGooglePayActionRef = useRef(null)
 
   const loadSellFastAlerts = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -345,6 +354,23 @@ export default function BuyerDashboardPage() {
       .slice(0, 5)
   }, [logisticsRequests])
 
+  const logisticsReviewByOrder = useMemo(() => {
+    const map = new Map()
+    for (const request of logisticsRequests) {
+      const orderId = Number(request?.order)
+      if (!Number.isFinite(orderId)) continue
+      if (!['accepted', 'picked_up', 'delivered'].includes(String(request?.status || ''))) continue
+      if (!map.has(orderId)) {
+        map.set(orderId, request)
+      }
+    }
+    return map
+  }, [logisticsRequests])
+
+  const getReviewableLogisticsForOrder = (orderId) => {
+    return logisticsReviewByOrder.get(Number(orderId)) || null
+  }
+
   const recentNegotiations = useMemo(() => negotiations.slice(0, 5), [negotiations])
 
   const getLatestOfferTotal = (negotiation) => {
@@ -433,47 +459,57 @@ export default function BuyerDashboardPage() {
     }
   }
 
-  const openRazorpayForOrder = async (order) => {
-    if (!window.Razorpay) {
-      throw new Error('Razorpay SDK failed to load. Refresh the page and try again.')
-    }
+  const openGooglePayForOrder = async (order) => {
     const { data: checkout } = await createOrderCheckout(order.id)
 
     return new Promise((resolve, reject) => {
-      const razorpay = new window.Razorpay({
-        key: checkout.key,
-        amount: checkout.amount,
-        currency: checkout.currency,
-        name: checkout.name,
-        description: checkout.description,
-        order_id: checkout.razorpay_order_id,
-        prefill: checkout.prefill,
-        theme: checkout.theme,
-        handler: async (response) => {
-          try {
-            await verifyOrderCheckout(order.id, {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            })
-            resolve()
-          } catch {
-            reject(new Error('Payment verification failed. Please contact support with your payment ID.'))
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            reject(new Error('Payment popup closed.'))
-          },
-        },
-      })
-
-      razorpay.on('payment.failed', () => {
-        reject(new Error('Payment failed or was cancelled.'))
-      })
-
-      razorpay.open()
+      pendingGooglePayActionRef.current = { resolve, reject }
+      setGooglePayError('')
+      setGooglePayProcessing(false)
+      setGooglePayCheckout({ ...checkout, order_id: order.id })
     })
+  }
+
+  const closeGooglePayModal = () => {
+    setGooglePayProcessing(false)
+    setGooglePayError('')
+    setGooglePayCheckout(null)
+  }
+
+  const cancelGooglePay = () => {
+    const pending = pendingGooglePayActionRef.current
+    pendingGooglePayActionRef.current = null
+    closeGooglePayModal()
+    if (pending?.reject) {
+      pending.reject(new Error('Payment was cancelled before completion.'))
+    }
+  }
+
+  const confirmGooglePay = async (payload) => {
+    if (!googlePayCheckout?.order_id) return
+
+    setGooglePayProcessing(true)
+    setGooglePayError('')
+
+    try {
+      await verifyOrderCheckout(googlePayCheckout.order_id, {
+        checkout_token: googlePayCheckout.checkout_token,
+        gpay_reference: payload.gpay_reference,
+        upi_id: payload.upi_id,
+      })
+      setGooglePayCheckout((prev) => (prev ? { ...prev, status: 'success' } : prev))
+      setGooglePayProcessing(false)
+      const pending = pendingGooglePayActionRef.current
+      pendingGooglePayActionRef.current = null
+      setTimeout(() => {
+        closeGooglePayModal()
+        pending?.resolve?.()
+      }, 1200)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setGooglePayError(detail || 'Payment could not be completed. Please try again.')
+      setGooglePayProcessing(false)
+    }
   }
 
   const closeOrderForm = () => {
@@ -484,6 +520,57 @@ export default function BuyerDashboardPage() {
     setOrderFormError('')
     setShowOrderAnimation(false)
     setOrderAnimationMessage('Preparing your order...')
+  }
+
+  const openSellFastBuyModal = (alert) => {
+    setSellFastBuyTarget(alert)
+    setSellFastBuyQuantity('')
+    setSellFastBuyError('')
+    setError('')
+  }
+
+  const closeSellFastBuyModal = () => {
+    setSellFastBuyTarget(null)
+    setSellFastBuyQuantity('')
+    setSellFastBuyError('')
+    setSellFastBuyLoading(false)
+  }
+
+  const submitSellFastBuy = async (event) => {
+    event.preventDefault()
+    if (!sellFastBuyTarget) return
+
+    const quantity = Number(sellFastBuyQuantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setSellFastBuyError('Please enter a valid quantity in kg.')
+      return
+    }
+
+    if (quantity > Number(sellFastBuyTarget.quantity_kg || 0)) {
+      setSellFastBuyError(`Requested quantity exceeds alert stock (${Number(sellFastBuyTarget.quantity_kg || 0).toFixed(1)} kg).`)
+      return
+    }
+
+    if (!sellFastBuyTarget.product) {
+      setSellFastBuyError('This alert does not have a linked listing for direct purchase.')
+      return
+    }
+
+    setSellFastBuyLoading(true)
+    setSellFastBuyError('')
+    setError('')
+    try {
+      const { data: order } = await buySellFastAlert(sellFastBuyTarget.id, { quantity })
+      await openGooglePayForOrder(order)
+      await reloadDashboardData()
+      await loadSellFastAlerts({ silent: true })
+      closeSellFastBuyModal()
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setSellFastBuyError(detail || err?.message || 'Could not complete emergency purchase. Please try again.')
+    } finally {
+      setSellFastBuyLoading(false)
+    }
   }
 
   const submitOrderForm = async (event) => {
@@ -526,15 +613,22 @@ export default function BuyerDashboardPage() {
         })
       } else {
         const { data: order } = await createOrder({ product: orderProduct.id, quantity })
-        setOrderAnimationMessage('Opening secure Razorpay checkout...')
-        await openRazorpayForOrder(order)
+        setOrderAnimationMessage('Opening Google Pay...')
+        await openGooglePayForOrder(order)
         setOrderAnimationMessage('Payment successful. Finalizing order...')
       }
 
       await reloadDashboardData()
       closeOrderForm()
     } catch (err) {
-      const msg = err?.message || err?.response?.data?.detail || 'Could not place order. Please try again.'
+      const detail = err?.response?.data?.detail
+      const data = err?.response?.data
+      const firstValidationError = data && typeof data === 'object'
+        ? Object.values(data).find((value) => typeof value === 'string' || (Array.isArray(value) && value.length > 0))
+        : null
+      const normalizedValidationError = Array.isArray(firstValidationError) ? firstValidationError[0] : firstValidationError
+      const transportMessage = err?.message
+      const msg = detail || normalizedValidationError || transportMessage || 'Could not place order. Please try again.'
       setOrderFormError(msg)
       setShowOrderAnimation(false)
     } finally {
@@ -602,8 +696,12 @@ export default function BuyerDashboardPage() {
     })
   }
 
-  const openReviewModal = (order) => {
-    setReviewTarget(order)
+  const openReviewModal = (order, target = 'farmer', logisticsRequest = null) => {
+    setReviewTarget({
+      order,
+      target,
+      logisticsRequest,
+    })
     setReviewRating('5')
     setReviewComment('')
     setReviewError('')
@@ -629,19 +727,21 @@ export default function BuyerDashboardPage() {
     setReviewSubmitting(true)
     setReviewError('')
     try {
-      if (reviewTarget.__demoReview) {
+      if (reviewTarget.order.__demoReview) {
         saveDemoReview({
           id: `demo-${Date.now()}`,
-          order: reviewTarget.id,
+          order: reviewTarget.order.id,
           reviewer: user?.id || null,
           reviewer_name: user?.name || user?.username || 'Demo Buyer',
-          reviewee: reviewTarget.farmer || 0,
+          reviewee: reviewTarget.target === 'logistics'
+            ? (reviewTarget.logisticsRequest?.logistics_partner || 0)
+            : (reviewTarget.order.farmer || 0),
           rating,
           comment: reviewComment,
           created_at: new Date().toISOString(),
-          product_name: reviewTarget.product_name || 'Demo Crop',
-          order_quantity: reviewTarget.quantity || 0,
-          order_value: reviewTarget.agreed_price || '0.00',
+          product_name: reviewTarget.order.product_name || 'Demo Crop',
+          order_quantity: reviewTarget.order.quantity || 0,
+          order_value: reviewTarget.order.agreed_price || '0.00',
           __demoReview: true,
         })
         setDemoReviewSubmitted(true)
@@ -650,7 +750,8 @@ export default function BuyerDashboardPage() {
       }
 
       await createReview({
-        order_id: reviewTarget.id,
+        order_id: reviewTarget.order.id,
+        review_target: reviewTarget.target,
         rating,
         comment: reviewComment,
       })
@@ -703,6 +804,16 @@ export default function BuyerDashboardPage() {
                       {alert.price_per_kg ? ` | ₹${alert.price_per_kg}/kg` : ''}
                     </p>
                     {alert.note ? <p className="mt-1 text-xs text-text-primary">{alert.note}</p> : null}
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => openSellFastBuyModal(alert)}
+                        disabled={!alert.product || Number(alert.quantity_kg || 0) <= 0}
+                        className="rounded-[8px] bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {!alert.product ? 'Direct buy unavailable' : 'Buy Now (No Bargaining)'}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[11px] text-text-muted">
                     {new Date(alert.created_at).toLocaleString('en-IN', {
@@ -744,18 +855,47 @@ export default function BuyerDashboardPage() {
                         </button>
                       )}
                       {order.buyer_review_submitted ? (
-                        <p className="mt-1 text-xs font-medium text-emerald-700">Review submitted.</p>
+                        <p className="mt-1 text-xs font-medium text-emerald-700">Farmer review submitted.</p>
                       ) : order.buyer_can_review ? (
                         <button
                           type="button"
-                          onClick={() => openReviewModal(order)}
+                          onClick={() => openReviewModal(order, 'farmer')}
                           className="mt-2 rounded-[8px] bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800"
                         >
                           Review Farmer
                         </button>
                       ) : (order.status === 'delivered' || order.status === 'completed') ? (
-                        <p className="mt-1 text-xs text-amber-700">Review window closed (3 days after delivery).</p>
+                        <p className="mt-1 text-xs text-amber-700">Farmer review window closed (3 days after delivery).</p>
                       ) : null}
+
+                      {(() => {
+                        const reviewableLogistics = getReviewableLogisticsForOrder(order.id)
+                        const deliveryDone = order.status === 'delivered' || order.status === 'completed'
+
+                        if (!reviewableLogistics) return null
+
+                        if (order.buyer_logistics_review_submitted) {
+                          return <p className="mt-1 text-xs font-medium text-blue-700">Logistics review submitted.</p>
+                        }
+
+                        if (order.buyer_can_review_logistics) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => openReviewModal(order, 'logistics', reviewableLogistics)}
+                              className="mt-2 rounded-[8px] bg-blue-700 px-2 py-1 text-xs text-white hover:bg-blue-800"
+                            >
+                              Review Logistics Partner
+                            </button>
+                          )
+                        }
+
+                        if (deliveryDone) {
+                          return <p className="mt-1 text-xs text-amber-700">Logistics review window closed (3 days after delivery).</p>
+                        }
+
+                        return null
+                      })()}
                     </div>
                     <StatusBadge status={order.status} />
                   </div>
@@ -1058,11 +1198,62 @@ export default function BuyerDashboardPage() {
         </div>
       )}
 
+      {sellFastBuyTarget && (
+        <div className="fixed inset-0 z-[1120] flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-md">
+            <p className="text-xl font-semibold text-red-700">Buy Emergency Alert</p>
+            <p className="mt-2 text-sm text-text-primary">
+              {sellFastBuyTarget.farmer_name} selling {sellFastBuyTarget.product_name}
+            </p>
+            <p className="text-sm text-text-muted">
+              Available: {Number(sellFastBuyTarget.quantity_kg || 0).toFixed(1)} kg
+              {sellFastBuyTarget.price_per_kg ? ` | Fixed price: ₹${sellFastBuyTarget.price_per_kg}/kg` : ''}
+            </p>
+            <p className="mt-1 text-xs text-red-700">No bargaining is allowed for emergency purchases.</p>
+
+            <form onSubmit={submitSellFastBuy} className="mt-4 space-y-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Quantity (kg)</label>
+                <Input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={sellFastBuyQuantity}
+                  onChange={(event) => setSellFastBuyQuantity(event.target.value)}
+                  placeholder="Enter quantity in kg"
+                  required
+                />
+              </div>
+
+              {sellFastBuyError ? <p className="text-sm text-red-600">{sellFastBuyError}</p> : null}
+
+              <div className="flex gap-2">
+                <Button type="button" onClick={closeSellFastBuyModal} className="bg-surface-2 text-text-primary hover:bg-surface-2">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={sellFastBuyLoading}>
+                  {sellFastBuyLoading ? 'Processing...' : 'Continue To Pay'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       {reviewTarget && (
         <div className="fixed inset-0 z-[1150] flex items-center justify-center bg-black/45 p-4">
           <Card className="w-full max-w-md">
-            <p className="text-xl font-semibold text-accent">Rate Farmer</p>
-            <p className="mt-2 text-sm text-text-muted">Order #{reviewTarget.id} • {reviewTarget.product_name}</p>
+            <p className="text-xl font-semibold text-accent">
+              {reviewTarget.target === 'logistics' ? 'Rate Logistics Partner' : 'Rate Farmer'}
+            </p>
+            <p className="mt-2 text-sm text-text-muted">
+              Order #{reviewTarget.order.id} • {reviewTarget.order.product_name}
+            </p>
+            {reviewTarget.target === 'logistics' ? (
+              <p className="mt-1 text-xs text-text-muted">
+                Partner: {reviewTarget.logisticsRequest?.logistics_partner_name || `Partner #${reviewTarget.logisticsRequest?.logistics_partner || ''}`}
+              </p>
+            ) : null}
             <form onSubmit={submitReview} className="mt-4 space-y-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-text-primary">Rating (1 to 5)</label>
@@ -1084,7 +1275,11 @@ export default function BuyerDashboardPage() {
                   onChange={(event) => setReviewComment(event.target.value)}
                   rows={3}
                   className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
-                  placeholder="Share your experience with the farmer"
+                  placeholder={
+                    reviewTarget.target === 'logistics'
+                      ? 'Share your delivery experience with the logistics partner'
+                      : 'Share your experience with the farmer'
+                  }
                 />
               </div>
 
@@ -1102,6 +1297,15 @@ export default function BuyerDashboardPage() {
           </Card>
         </div>
       )}
+
+      <FakeGooglePayModal
+        isOpen={Boolean(googlePayCheckout)}
+        checkout={googlePayCheckout}
+        processing={googlePayProcessing}
+        error={googlePayError}
+        onCancel={cancelGooglePay}
+        onConfirm={confirmGooglePay}
+      />
 
       <BuyerFarmerChatWidget />
     </>

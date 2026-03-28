@@ -39,6 +39,7 @@ class LogisticsProfile(models.Model):
 	vehicle_type = models.CharField(max_length=50, choices=[('bike', 'Bike'), ('tempo', 'Tempo'), ('truck', 'Truck')])
 	max_weight_kg = models.FloatField()
 	operating_states = models.JSONField(default=list)
+	vehicles = models.JSONField(default=list, blank=True)
 	rating = models.FloatField(default=0.0)
 	total_deliveries = models.IntegerField(default=0)
 

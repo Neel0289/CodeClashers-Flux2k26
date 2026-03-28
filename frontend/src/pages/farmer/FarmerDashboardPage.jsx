@@ -7,7 +7,7 @@ import { getNegotiations, respondNegotiation } from '../../api/negotiations'
 import { getOrders, setOrderLocations } from '../../api/orders'
 import { createLogisticsCheckout, verifyLogisticsCheckout } from '../../api/payments'
 import { createProduct, updateProduct, deleteProduct, getProducts } from '../../api/products'
-import { getReviews } from '../../api/reviews'
+import { createReview, getReviews } from '../../api/reviews'
 import { createSellFastAlert } from '../../api/alerts'
 import AddProductModal from '../../components/farmer/AddProductModal'
 import FarmerAIAssistant from '../../components/farmer/FarmerAIAssistant'
@@ -16,6 +16,7 @@ import EditProductModal from '../../components/farmer/EditProductModal'
 import Button from '../../components/shared/Button'
 import BuyerFarmerChatWidget from '../../components/shared/BuyerFarmerChatWidget'
 import Card from '../../components/shared/Card'
+import FakeGooglePayModal from '../../components/shared/FakeGooglePayModal'
 import PageShell from '../../components/shared/PageShell'
 import StatusBadge from '../../components/shared/StatusBadge'
 import useAuth from '../../hooks/useAuth'
@@ -85,21 +86,6 @@ function seedDemoReviewForFarmer(farmerId) {
 const INDIA_CENTER = [22.9734, 78.6569]
 const geocodeCache = new Map()
 
-function loadRazorpayScript() {
-  return new Promise((resolve) => {
-    if (window.Razorpay) {
-      resolve(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
-
 export default function FarmerDashboardPage() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
@@ -110,6 +96,11 @@ export default function FarmerDashboardPage() {
   const [orders, setOrders] = useState([])
   const [reviews, setReviews] = useState([])
   const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [logisticsReviewTarget, setLogisticsReviewTarget] = useState(null)
+  const [logisticsReviewRating, setLogisticsReviewRating] = useState('5')
+  const [logisticsReviewComment, setLogisticsReviewComment] = useState('')
+  const [logisticsReviewSubmitting, setLogisticsReviewSubmitting] = useState(false)
+  const [logisticsReviewError, setLogisticsReviewError] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -128,6 +119,9 @@ export default function FarmerDashboardPage() {
   const [bookingMessage, setBookingMessage] = useState('')
   const [bookingError, setBookingError] = useState('')
   const [quoteActionLoadingId, setQuoteActionLoadingId] = useState(null)
+  const [googlePayCheckout, setGooglePayCheckout] = useState(null)
+  const [googlePayProcessing, setGooglePayProcessing] = useState(false)
+  const [googlePayError, setGooglePayError] = useState('')
   const [showPaymentAnimation, setShowPaymentAnimation] = useState(false)
   const [paymentAnimationMessage, setPaymentAnimationMessage] = useState('Preparing secure payment...')
   const [pickupCoords, setPickupCoords] = useState(null)
@@ -150,6 +144,7 @@ export default function FarmerDashboardPage() {
   const knownOrderIdsRef = useRef(new Set())
   const hasPrimedOrderRefsRef = useRef(false)
   const paymentAnimationTimeoutRef = useRef(null)
+  const pendingGooglePayActionRef = useRef(null)
 
   const triggerFarmerCoinAnimation = (message) => {
     if (paymentAnimationTimeoutRef.current) {
@@ -296,7 +291,8 @@ export default function FarmerDashboardPage() {
         const buyerName = firstNewOrder?.buyer_name || 'Customer'
         const amount = Number(firstNewOrder?.agreed_price || 0)
         const suffix = newlyArrivedOrders.length > 1 ? ` (+${newlyArrivedOrders.length - 1} more)` : ''
-        triggerFarmerCoinAnimation(`New order from ${buyerName}: ₹${amount.toFixed(2)}${suffix}`)
+        const orderPrefix = firstNewOrder?.is_emergency_order ? 'Emergency order' : 'New order'
+        triggerFarmerCoinAnimation(`${orderPrefix} from ${buyerName}: ₹${amount.toFixed(2)}${suffix}`)
       }
       return
     }
@@ -622,63 +618,65 @@ export default function FarmerDashboardPage() {
     }
   }
 
+  const openGooglePayForLogisticsQuote = async (requestId) => {
+    const { data: checkoutData } = await createLogisticsCheckout(requestId)
+
+    return new Promise((resolve, reject) => {
+      pendingGooglePayActionRef.current = { resolve, reject }
+      setGooglePayError('')
+      setGooglePayProcessing(false)
+      setGooglePayCheckout({ ...checkoutData, request_id: requestId })
+    })
+  }
+
+  const closeGooglePayModal = () => {
+    setGooglePayCheckout(null)
+    setGooglePayProcessing(false)
+    setGooglePayError('')
+  }
+
+  const cancelGooglePay = () => {
+    const pending = pendingGooglePayActionRef.current
+    pendingGooglePayActionRef.current = null
+    closeGooglePayModal()
+    pending?.reject?.(new Error('PAYMENT_CANCELLED'))
+  }
+
+  const confirmGooglePay = async (payload) => {
+    if (!googlePayCheckout?.request_id) return
+
+    setGooglePayProcessing(true)
+    setGooglePayError('')
+    try {
+      await verifyLogisticsCheckout(googlePayCheckout.request_id, {
+        checkout_token: googlePayCheckout.checkout_token,
+        gpay_reference: payload.gpay_reference,
+        upi_id: payload.upi_id,
+      })
+      setGooglePayCheckout((prev) => (prev ? { ...prev, status: 'success' } : prev))
+      setGooglePayProcessing(false)
+      const pending = pendingGooglePayActionRef.current
+      pendingGooglePayActionRef.current = null
+      setTimeout(() => {
+        closeGooglePayModal()
+        pending?.resolve?.()
+      }, 1200)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setGooglePayError(detail || 'Payment could not be completed. Please try again.')
+      setGooglePayProcessing(false)
+    }
+  }
+
   const handleFarmerQuoteResponse = async (requestId, action) => {
     setBookingError('')
     setBookingMessage('')
     setQuoteActionLoadingId(requestId)
     try {
       if (action === 'accept') {
-        setPaymentAnimationMessage('Preparing secure Razorpay checkout...')
+        setPaymentAnimationMessage('Preparing Google Pay...')
         setShowPaymentAnimation(true)
-
-        const scriptLoaded = await loadRazorpayScript()
-        if (!scriptLoaded) {
-          setBookingError('Could not load Razorpay checkout. Please try again.')
-          setQuoteActionLoadingId(null)
-          setShowPaymentAnimation(false)
-          return
-        }
-
-        const { data: checkoutData } = await createLogisticsCheckout(requestId)
-        setPaymentAnimationMessage('Launching payment portal...')
-
-        const paymentResult = await new Promise((resolve, reject) => {
-          const razorpay = new window.Razorpay({
-            key: checkoutData.key,
-            amount: checkoutData.amount,
-            currency: checkoutData.currency,
-            order_id: checkoutData.razorpay_order_id,
-            name: checkoutData.name,
-            description: checkoutData.description,
-            prefill: checkoutData.prefill,
-            theme: checkoutData.theme,
-            handler: (response) => {
-              setShowPaymentAnimation(false)
-              resolve(response)
-            },
-            modal: {
-              ondismiss: () => {
-                setShowPaymentAnimation(false)
-                reject(new Error('PAYMENT_CANCELLED'))
-              },
-            },
-          })
-
-          razorpay.on('payment.failed', (event) => {
-            setShowPaymentAnimation(false)
-            reject(new Error(event?.error?.description || 'Payment failed.'))
-          })
-
-          setTimeout(() => {
-            razorpay.open()
-          }, 600)
-        })
-
-        await verifyLogisticsCheckout(requestId, {
-          razorpay_order_id: paymentResult.razorpay_order_id,
-          razorpay_payment_id: paymentResult.razorpay_payment_id,
-          razorpay_signature: paymentResult.razorpay_signature,
-        })
+        await openGooglePayForLogisticsQuote(requestId)
 
         setBookingMessage('Payment successful. Logistics quote accepted.')
       } else {
@@ -724,6 +722,13 @@ export default function FarmerDashboardPage() {
     return (total / reviews.length).toFixed(1)
   }, [reviews])
   const recentLogisticsRequests = useMemo(() => logisticsRequests.slice(0, 5), [logisticsRequests])
+  const ordersById = useMemo(() => {
+    const map = new Map()
+    for (const order of orders) {
+      map.set(Number(order.id), order)
+    }
+    return map
+  }, [orders])
   const acceptedLogisticsCount = useMemo(
     () => logisticsRequests.filter((request) => request.status === 'accepted').length,
     [logisticsRequests],
@@ -803,6 +808,57 @@ export default function FarmerDashboardPage() {
 
     if (!opened) {
       setError('Could not open invoice window. Please allow popups and try again.')
+    }
+  }
+
+  const openLogisticsReviewModal = (request) => {
+    const order = ordersById.get(Number(request?.order))
+    if (!order) {
+      setError('Could not find the linked order for this logistics request.')
+      return
+    }
+
+    setLogisticsReviewTarget({
+      request,
+      order,
+    })
+    setLogisticsReviewRating('5')
+    setLogisticsReviewComment('')
+    setLogisticsReviewError('')
+  }
+
+  const closeLogisticsReviewModal = () => {
+    setLogisticsReviewTarget(null)
+    setLogisticsReviewRating('5')
+    setLogisticsReviewComment('')
+    setLogisticsReviewError('')
+  }
+
+  const submitLogisticsReview = async (event) => {
+    event.preventDefault()
+    if (!logisticsReviewTarget?.order) return
+
+    const rating = Number(logisticsReviewRating)
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      setLogisticsReviewError('Please select a rating between 1 and 5.')
+      return
+    }
+
+    setLogisticsReviewSubmitting(true)
+    setLogisticsReviewError('')
+    try {
+      await createReview({
+        order_id: logisticsReviewTarget.order.id,
+        review_target: 'logistics',
+        rating,
+        comment: logisticsReviewComment,
+      })
+      await loadDashboard()
+      closeLogisticsReviewModal()
+    } catch (err) {
+      setLogisticsReviewError(err?.response?.data?.detail || 'Could not submit logistics review.')
+    } finally {
+      setLogisticsReviewSubmitting(false)
     }
   }
 
@@ -1002,6 +1058,15 @@ export default function FarmerDashboardPage() {
                 ))}
               </div>
             )}
+
+            <FakeGooglePayModal
+              isOpen={Boolean(googlePayCheckout)}
+              checkout={googlePayCheckout}
+              processing={googlePayProcessing}
+              error={googlePayError}
+              onCancel={cancelGooglePay}
+              onConfirm={confirmGooglePay}
+            />
           </Card>
 
           <Card>
@@ -1090,6 +1155,11 @@ export default function FarmerDashboardPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
+                        {order.is_emergency_order && (
+                          <p className="mb-1 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            Emergency Sell Fast Order
+                          </p>
+                        )}
                         <p className="font-medium">Customer: {order.buyer_name || `Buyer #${order.buyer}`}</p>
                         <p className="text-xs text-text-muted">Wants: {order.product_name || `Product #${order.product}`}</p>
                         <p className="text-xs text-text-muted">How much: {order.quantity} kg</p>
@@ -1287,6 +1357,36 @@ export default function FarmerDashboardPage() {
                   <div key={request.id} className="rounded-[12px] border border-border px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
+                        {(() => {
+                          const linkedOrder = ordersById.get(Number(request.order))
+                          const deliveryDone = linkedOrder?.status === 'delivered' || linkedOrder?.status === 'completed'
+
+                          if (!linkedOrder || !['accepted', 'picked_up', 'delivered'].includes(request.status)) {
+                            return null
+                          }
+
+                          if (linkedOrder.farmer_logistics_review_submitted) {
+                            return <p className="mb-1 text-xs font-medium text-blue-700">Logistics review submitted.</p>
+                          }
+
+                          if (linkedOrder.farmer_can_review_logistics) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => openLogisticsReviewModal(request)}
+                                className="mb-2 rounded-[8px] bg-blue-700 px-2 py-1 text-xs text-white hover:bg-blue-800"
+                              >
+                                Review Logistics Partner
+                              </button>
+                            )
+                          }
+
+                          if (deliveryDone) {
+                            return <p className="mb-1 text-xs text-amber-700">Logistics review window closed (3 days after delivery).</p>
+                          }
+
+                          return null
+                        })()}
                         <p className="font-medium">Partner: {request.logistics_partner_name || `#${request.logistics_partner}`}</p>
                         <p className="text-xs text-text-muted">Order: #{request.order} | Weight: {request.weight_kg} kg</p>
                         {request.quoted_fee && (
@@ -1342,7 +1442,7 @@ export default function FarmerDashboardPage() {
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-[16px] bg-white p-6 text-center shadow-2xl">
             <div className="mx-auto coin-loader" />
-            <p className="mt-4 text-lg font-semibold text-text-primary">Redirecting To Razorpay</p>
+            <p className="mt-4 text-lg font-semibold text-text-primary">Opening Google Pay</p>
             <p className="mt-1 text-sm text-text-muted">{paymentAnimationMessage}</p>
             <div className="mt-3 flex justify-center gap-1">
               <span className="h-2 w-2 rounded-full bg-emerald-600 animate-bounce [animation-delay:-0.2s]" />
@@ -1356,6 +1456,61 @@ export default function FarmerDashboardPage() {
       <AddProductModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleAddProduct} loading={isSubmitting} />
 
       <EditProductModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSubmit={handleEditProduct} loading={isSubmitting} product={editingProduct} />
+
+      {logisticsReviewTarget && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-md">
+            <p className="text-xl font-semibold text-accent">Rate Logistics Partner</p>
+            <p className="mt-2 text-sm text-text-muted">
+              Order #{logisticsReviewTarget.order.id} • {logisticsReviewTarget.order.product_name || 'Order'}
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              Partner: {logisticsReviewTarget.request?.logistics_partner_name || `Partner #${logisticsReviewTarget.request?.logistics_partner || ''}`}
+            </p>
+
+            <form onSubmit={submitLogisticsReview} className="mt-4 space-y-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Rating (1 to 5)</label>
+                <select
+                  value={logisticsReviewRating}
+                  onChange={(event) => setLogisticsReviewRating(event.target.value)}
+                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+                >
+                  {[5, 4, 3, 2, 1].map((value) => (
+                    <option key={value} value={String(value)}>{value}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Comment (optional)</label>
+                <textarea
+                  value={logisticsReviewComment}
+                  onChange={(event) => setLogisticsReviewComment(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-[12px] border border-border bg-white px-3 py-2 text-text-primary"
+                  placeholder="Share your delivery experience with this logistics partner"
+                />
+              </div>
+
+              {logisticsReviewError ? <p className="text-sm text-red-600">{logisticsReviewError}</p> : null}
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={closeLogisticsReviewModal}
+                  className="bg-surface-2 text-text-primary hover:bg-surface-2"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={logisticsReviewSubmitting}>
+                  {logisticsReviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
 
       {isSellFastModalOpen && (
         <div className="fixed inset-0 z-[1250] flex items-center justify-center bg-black/45 p-4">

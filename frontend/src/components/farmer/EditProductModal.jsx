@@ -43,6 +43,17 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
 
   const handleChange = (e) => {
     const { name, value } = e.target
+
+    if (name === 'quantity_available') {
+      if (value === '') {
+        setFormData((prev) => ({ ...prev, quantity_available: '' }))
+      } else {
+        setFormData((prev) => ({ ...prev, quantity_available: String(Math.max(0, Number(value))) }))
+      }
+      setError('')
+      return
+    }
+
     setFormData((prev) => {
       if (name === 'category') {
         return {
@@ -166,6 +177,7 @@ export default function EditProductModal({ isOpen, onClose, onSubmit, loading, p
               <input
                 type="number"
                 step="0.01"
+                min="0"
                 name="quantity_available"
                 value={formData.quantity_available}
                 onChange={handleChange}

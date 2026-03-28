@@ -1,8 +1,6 @@
 from decimal import Decimal
 from datetime import timedelta
 
-import razorpay
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -15,10 +13,6 @@ from apps.orders.models import Order
 from apps.payments.models import Payment, Review
 from apps.payments.serializers import PaymentSerializer, ReviewSerializer
 from apps.users.models import LogisticsProfile
-
-
-def get_razorpay_client():
-	return razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 
 class PaymentPayAPIView(APIView):
@@ -63,30 +57,21 @@ class BuyerOrderCheckoutCreateAPIView(APIView):
 			return Response({'detail': 'Order amount must be greater than 0.'}, status=status.HTTP_400_BAD_REQUEST)
 
 		amount_paise = int(amount * Decimal('100'))
-		client = get_razorpay_client()
-		razor_order = client.order.create({
-			'amount': amount_paise,
-			'currency': 'INR',
-			'receipt': f'order-{order.id}-{int(timezone.now().timestamp())}',
-			'notes': {
-				'order_id': str(order.id),
-				'buyer_id': str(order.buyer_id),
-			},
-		})
+		checkout_token = f'gpay-order-{order.id}-{int(timezone.now().timestamp())}'
 
 		return Response({
-			'key': settings.RAZORPAY_KEY_ID,
 			'amount': amount_paise,
 			'currency': 'INR',
-			'razorpay_order_id': razor_order.get('id'),
-			'description': f'Payment for Order #{order.id}',
+			'provider': 'google_pay_demo',
+			'checkout_token': checkout_token,
+			'description': f'Google Pay demo payment for Order #{order.id}',
 			'name': 'KhetBazaar',
 			'prefill': {
 				'name': request.user.first_name,
 				'email': request.user.email,
 				'contact': request.user.phone,
 			},
-			'theme': {'color': '#15803d'},
+			'theme': {'color': '#34A853'},
 		})
 
 
@@ -97,21 +82,14 @@ class BuyerOrderCheckoutVerifyAPIView(APIView):
 		if request.user.id != order.buyer_id:
 			raise PermissionDenied('Only buyer can verify payment for this order.')
 
-		razorpay_order_id = request.data.get('razorpay_order_id')
-		razorpay_payment_id = request.data.get('razorpay_payment_id')
-		razorpay_signature = request.data.get('razorpay_signature')
-		if not razorpay_order_id or not razorpay_payment_id or not razorpay_signature:
-			return Response({'detail': 'Missing Razorpay payment verification fields.'}, status=status.HTTP_400_BAD_REQUEST)
+		checkout_token = request.data.get('checkout_token')
+		gpay_reference = request.data.get('gpay_reference')
+		upi_id = request.data.get('upi_id')
+		if not checkout_token or not gpay_reference or not upi_id:
+			return Response({'detail': 'Missing Google Pay verification fields.'}, status=status.HTTP_400_BAD_REQUEST)
 
-		client = get_razorpay_client()
-		try:
-			client.utility.verify_payment_signature({
-				'razorpay_order_id': razorpay_order_id,
-				'razorpay_payment_id': razorpay_payment_id,
-				'razorpay_signature': razorpay_signature,
-			})
-		except Exception:
-			return Response({'detail': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
+		if not str(checkout_token).startswith(f'gpay-order-{order.id}-'):
+			return Response({'detail': 'Invalid checkout token.'}, status=status.HTTP_400_BAD_REQUEST)
 
 		produce_amount = Decimal(str(order.agreed_price)).quantize(Decimal('0.01'))
 		payment, _ = Payment.objects.update_or_create(
@@ -181,8 +159,27 @@ class ReviewListCreateAPIView(APIView):
 		except Order.DoesNotExist:
 			return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-		if request.user.id != order.buyer_id:
-			raise PermissionDenied('Only buyer can submit this review.')
+		review_target = str(request.data.get('review_target') or request.data.get('reviewee_role') or 'farmer').strip().lower()
+		if review_target not in {'farmer', 'logistics'}:
+			return Response({'detail': 'review_target must be either farmer or logistics.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		reviewer_id = request.user.id
+		if review_target == 'farmer':
+			if reviewer_id != order.buyer_id:
+				raise PermissionDenied('Only buyer can review farmer for this order.')
+			reviewee = order.farmer
+		else:
+			if reviewer_id not in {order.buyer_id, order.farmer_id}:
+				raise PermissionDenied('Only buyer or farmer can review logistics partner for this order.')
+			logistics_request = (
+				LogisticsRequest.objects
+				.filter(order=order, status__in=['accepted', 'picked_up', 'delivered'])
+				.order_by('-created_at')
+				.first()
+			)
+			if not logistics_request:
+				return Response({'detail': 'No accepted logistics partner found for this order.'}, status=status.HTTP_400_BAD_REQUEST)
+			reviewee = logistics_request.logistics_partner
 
 		if order.status not in {'delivered', 'completed'}:
 			return Response({'detail': 'Review is allowed only after delivery.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -191,8 +188,12 @@ class ReviewListCreateAPIView(APIView):
 		if timezone.now() > review_deadline:
 			return Response({'detail': 'Review window expired. Reviews must be submitted within 3 days after delivery.'}, status=status.HTTP_400_BAD_REQUEST)
 
-		if Review.objects.filter(order=order, reviewer=request.user).exists():
-			return Response({'detail': 'You already submitted a review for this order.'}, status=status.HTTP_400_BAD_REQUEST)
+		if reviewee_id := getattr(reviewee, 'id', None):
+			if reviewer_id == reviewee_id:
+				return Response({'detail': 'You cannot review yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+		if Review.objects.filter(order=order, reviewer=request.user, reviewee=reviewee).exists():
+			return Response({'detail': 'You already submitted this review for this order.'}, status=status.HTTP_400_BAD_REQUEST)
 
 		rating = request.data.get('rating')
 		comment = request.data.get('comment', '')
@@ -208,7 +209,7 @@ class ReviewListCreateAPIView(APIView):
 		review = Review.objects.create(
 			order=order,
 			reviewer=request.user,
-			reviewee=order.farmer,
+			reviewee=reviewee,
 			rating=rating_value,
 			comment=comment,
 		)
@@ -228,30 +229,21 @@ class LogisticsQuoteCheckoutCreateAPIView(APIView):
 			return Response({'detail': 'Quoted amount must be greater than 0.'}, status=status.HTTP_400_BAD_REQUEST)
 
 		amount_paise = int(fee * Decimal('100'))
-		client = get_razorpay_client()
-		razor_order = client.order.create({
-			'amount': amount_paise,
-			'currency': 'INR',
-			'receipt': f'logreq-{logistics_request.id}-{int(timezone.now().timestamp())}',
-			'notes': {
-				'logistics_request_id': str(logistics_request.id),
-				'order_id': str(logistics_request.order_id),
-			},
-		})
+		checkout_token = f'gpay-logreq-{logistics_request.id}-{int(timezone.now().timestamp())}'
 
 		return Response({
-			'key': settings.RAZORPAY_KEY_ID,
 			'amount': amount_paise,
 			'currency': 'INR',
-			'razorpay_order_id': razor_order.get('id'),
-			'description': f'Logistics service payment for Order #{logistics_request.order_id}',
+			'provider': 'google_pay_demo',
+			'checkout_token': checkout_token,
+			'description': f'Google Pay demo logistics payment for Order #{logistics_request.order_id}',
 			'name': 'KhetBazaar (Demo)',
 			'prefill': {
 				'name': request.user.first_name,
 				'email': request.user.email,
 				'contact': request.user.phone,
 			},
-			'theme': {'color': '#15803d'},
+			'theme': {'color': '#34A853'},
 		})
 
 
@@ -264,21 +256,14 @@ class LogisticsQuoteCheckoutVerifyAPIView(APIView):
 		if logistics_request.status != 'quoted':
 			return Response({'detail': 'Only quoted requests can be paid and accepted.'}, status=status.HTTP_400_BAD_REQUEST)
 
-		razorpay_order_id = request.data.get('razorpay_order_id')
-		razorpay_payment_id = request.data.get('razorpay_payment_id')
-		razorpay_signature = request.data.get('razorpay_signature')
-		if not razorpay_order_id or not razorpay_payment_id or not razorpay_signature:
-			return Response({'detail': 'Missing Razorpay payment verification fields.'}, status=status.HTTP_400_BAD_REQUEST)
+		checkout_token = request.data.get('checkout_token')
+		gpay_reference = request.data.get('gpay_reference')
+		upi_id = request.data.get('upi_id')
+		if not checkout_token or not gpay_reference or not upi_id:
+			return Response({'detail': 'Missing Google Pay verification fields.'}, status=status.HTTP_400_BAD_REQUEST)
 
-		client = get_razorpay_client()
-		try:
-			client.utility.verify_payment_signature({
-				'razorpay_order_id': razorpay_order_id,
-				'razorpay_payment_id': razorpay_payment_id,
-				'razorpay_signature': razorpay_signature,
-			})
-		except Exception:
-			return Response({'detail': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
+		if not str(checkout_token).startswith(f'gpay-logreq-{logistics_request.id}-'):
+			return Response({'detail': 'Invalid checkout token.'}, status=status.HTTP_400_BAD_REQUEST)
 
 		logistics_request.status = 'accepted'
 		logistics_request.save(update_fields=['status'])

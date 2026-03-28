@@ -166,7 +166,7 @@ export default function FarmerInsightsCharts({ orders = [] }) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
 
-    const palette = ['#16a34a', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#14b8a6', '#3b82f6', '#8b5cf6']
+    const palette = ['#16a34a', '#2563eb', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#e11d48', '#84cc16']
 
     return {
       labels: rows.map(([name]) => name),
@@ -175,7 +175,8 @@ export default function FarmerInsightsCharts({ orders = [] }) {
           label: 'Traded Quantity (kg)',
           data: rows.map(([, kg]) => Number(kg.toFixed(2))),
           backgroundColor: rows.map((_, idx) => palette[idx % palette.length]),
-          borderWidth: 0,
+          borderColor: '#ffffff',
+          borderWidth: 2,
         },
       ],
     }

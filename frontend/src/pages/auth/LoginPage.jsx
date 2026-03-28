@@ -42,7 +42,7 @@ export default function LoginPage() {
           setError('Please enter a valid 10-digit mobile number.')
           return
         }
-        payload.email = `${mobile}@khetbazar.farmer`
+        payload.email = mobile
         delete payload.mobile
       } else {
         payload.email = String(payload.email || '').trim().toLowerCase()
