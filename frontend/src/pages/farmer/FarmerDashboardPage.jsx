@@ -777,6 +777,35 @@ export default function FarmerDashboardPage() {
     }
   }
 
+  const handleGenerateLogisticsInvoice = (request) => {
+    const routeText = `${request?.pickup_city || '-'}, ${request?.pickup_state || '-'} -> ${request?.drop_city || '-'}, ${request?.drop_state || '-'}`
+    const opened = openInvoiceWindow({
+      invoicePrefix: 'LINV',
+      orderId: request?.order || request?.id,
+      invoiceDate: request?.created_at ? new Date(request.created_at) : new Date(),
+      title: 'KhetBazaar Logistics Invoice',
+      subtitle: 'Farmer logistics invoice',
+      sellerLabel: 'Service Provider (Logistics)',
+      sellerName: request?.logistics_partner_name || `Partner #${request?.logistics_partner || ''}`,
+      sellerAddress: routeText,
+      buyerLabel: 'Farmer',
+      buyerName: user?.first_name || user?.username || 'Farmer',
+      buyerAddress: `${request?.pickup_city || user?.profile?.city || ''}, ${request?.pickup_state || user?.profile?.state || ''}`,
+      itemLabel: 'Service',
+      itemName: `Logistics for Order #${request?.order || ''}`,
+      quantity: request?.weight_kg || request?.order_quantity || 0,
+      total: request?.quoted_fee || 0,
+      extraRows: [
+        { label: 'Request Type', value: formatStatus(request?.status) },
+        { label: 'Route', value: routeText },
+      ],
+    })
+
+    if (!opened) {
+      setError('Could not open invoice window. Please allow popups and try again.')
+    }
+  }
+
   const openSellFastModal = () => {
     setSellFastError('')
     setSellFastSuccess('')
@@ -1266,6 +1295,15 @@ export default function FarmerDashboardPage() {
                         <p className="text-xs text-text-muted">Route: {request.pickup_city}, {request.pickup_state} {'->'} {request.drop_city}, {request.drop_state}</p>
                         {request.status === 'accepted' && (
                           <p className="text-xs text-green-700">This logistics partner accepted your request.</p>
+                        )}
+                        {(request.status === 'accepted' || request.quoted_fee) && (
+                          <Button
+                            type="button"
+                            onClick={() => handleGenerateLogisticsInvoice(request)}
+                            className="mt-2 bg-accent px-2 py-1 text-xs font-semibold text-white hover:opacity-90"
+                          >
+                            Invoice
+                          </Button>
                         )}
                         {request.status === 'quoted' && (
                           <div className="mt-2 flex gap-2">

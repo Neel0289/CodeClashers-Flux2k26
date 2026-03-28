@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { createNegotiation, getNegotiations, respondNegotiation } from '../../api/negotiations'
 import { getSellFastAlerts } from '../../api/alerts'
+import { getLogisticsRequests } from '../../api/logistics'
 import { createOrder, getOrders } from '../../api/orders'
 import { createOrderCheckout, verifyOrderCheckout } from '../../api/payments'
 import { getProducts } from '../../api/products'
@@ -119,6 +120,7 @@ export default function BuyerDashboardPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewError, setReviewError] = useState('')
   const [demoReviewSubmitted, setDemoReviewSubmitted] = useState(false)
+  const [logisticsRequests, setLogisticsRequests] = useState([])
   const [sellFastAlerts, setSellFastAlerts] = useState([])
   const [alertsLoading, setAlertsLoading] = useState(true)
 
@@ -144,7 +146,12 @@ export default function BuyerDashboardPage() {
     const load = async () => {
       setLoading(true)
       setError('')
-      const [ordersRes, negotiationsRes, productsRes] = await Promise.allSettled([getOrders(), getNegotiations(), getProducts()])
+      const [ordersRes, negotiationsRes, productsRes, logisticsRes] = await Promise.allSettled([
+        getOrders(),
+        getNegotiations(),
+        getProducts(),
+        getLogisticsRequests(),
+      ])
 
       if (ordersRes.status === 'fulfilled') {
         setOrders(Array.isArray(ordersRes.value.data) ? ordersRes.value.data : [])
@@ -156,6 +163,11 @@ export default function BuyerDashboardPage() {
         setFarmerProducts(Array.isArray(productsRes.value.data) ? productsRes.value.data : [])
       } else {
         setFarmerProducts([])
+      }
+      if (logisticsRes.status === 'fulfilled') {
+        setLogisticsRequests(Array.isArray(logisticsRes.value.data) ? logisticsRes.value.data : [])
+      } else {
+        setLogisticsRequests([])
       }
 
       if (ordersRes.status === 'rejected' && negotiationsRes.status === 'rejected') {
@@ -326,6 +338,13 @@ export default function BuyerDashboardPage() {
     }
     return [demoOrder, ...rows].slice(0, 5)
   }, [orders, demoReviewSubmitted])
+
+  const recentLogistics = useMemo(() => {
+    return [...logisticsRequests]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 5)
+  }, [logisticsRequests])
+
   const recentNegotiations = useMemo(() => negotiations.slice(0, 5), [negotiations])
 
   const getLatestOfferTotal = (negotiation) => {
@@ -548,6 +567,41 @@ export default function BuyerDashboardPage() {
     })
   }
 
+  const handleGenerateLogisticInvoice = (order) => {
+    const matchedRequest = logisticsRequests.find(
+      (request) => Number(request.order) === Number(order.id) && Number(request.quoted_fee || 0) > 0,
+    )
+
+    if (!matchedRequest) {
+      setError('Logistic invoice is not available for this order yet.')
+      return
+    }
+
+    const routeText = `${matchedRequest.pickup_city || '-'}, ${matchedRequest.pickup_state || '-'} -> ${matchedRequest.drop_city || '-'}, ${matchedRequest.drop_state || '-'}`
+
+    openInvoiceWindow({
+      invoicePrefix: 'BLINV',
+      orderId: order?.id,
+      invoiceDate: matchedRequest?.created_at ? new Date(matchedRequest.created_at) : new Date(),
+      title: 'KhetBazaar Logistics Invoice',
+      subtitle: 'Buyer logistics invoice',
+      sellerLabel: 'Service Provider (Logistics)',
+      sellerName: matchedRequest?.logistics_partner_name || `Partner #${matchedRequest?.logistics_partner || ''}`,
+      sellerAddress: routeText,
+      buyerLabel: 'Buyer',
+      buyerName: user?.first_name || user?.username || 'Buyer',
+      buyerAddress: `${matchedRequest?.drop_city || order?.buyer_city || ''}, ${matchedRequest?.drop_state || order?.buyer_state || ''}`,
+      itemLabel: 'Service',
+      itemName: `Logistics for ${order?.product_name || `Order #${order?.id}`}`,
+      quantity: matchedRequest?.weight_kg || order?.quantity || 0,
+      total: matchedRequest?.quoted_fee || 0,
+      extraRows: [
+        { label: 'Order', value: `#${order?.id || ''}` },
+        { label: 'Route', value: routeText },
+      ],
+    })
+  }
+
   const openReviewModal = (order) => {
     setReviewTarget(order)
     setReviewRating('5')
@@ -665,7 +719,7 @@ export default function BuyerDashboardPage() {
         )}
       </Card>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         <Card>
           <p className="mb-4 text-lg font-semibold">Recent Orders</p>
           {loading && <p className="text-sm text-text-muted">Loading orders...</p>}
@@ -707,6 +761,49 @@ export default function BuyerDashboardPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <p className="mb-4 text-lg font-semibold">Logistics</p>
+          {loading && <p className="text-sm text-text-muted">Loading logistics...</p>}
+          {!loading && recentLogistics.length === 0 && <p className="text-sm text-text-muted">No logistics updates yet.</p>}
+          {!loading && recentLogistics.length > 0 && (
+            <div className="space-y-3">
+              {recentLogistics.map((request) => {
+                const linkedOrder = orders.find((order) => Number(order.id) === Number(request.order))
+                const packageSize = Number(request.weight_kg || linkedOrder?.quantity || 0)
+                const hasInvoice = Number(request.quoted_fee || 0) > 0
+
+                return (
+                  <div key={request.id} className="rounded-[12px] border border-border px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">Package size: {packageSize.toFixed(1)} kg</p>
+                        <p className="text-xs text-text-muted">
+                          Provider: {request.logistics_partner_name || `Partner #${request.logistics_partner}`}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          Route: {request.pickup_city || '-'}, {request.pickup_state || '-'} to {request.drop_city || '-'}, {request.drop_state || '-'}
+                        </p>
+                        <p className="text-xs text-text-muted">Fee: ₹{request.quoted_fee || '0.00'}</p>
+                        <p className="text-xs text-text-muted">Order: #{request.order}</p>
+                        {hasInvoice && linkedOrder && ['confirmed', 'delivered'].includes(linkedOrder.status) && (
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateLogisticInvoice(linkedOrder)}
+                            className="mt-2 rounded-[8px] bg-emerald-700 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-800"
+                          >
+                            Logistic Invoice
+                          </button>
+                        )}
+                      </div>
+                      <span className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text-primary">{formatStatus(request.status)}</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </Card>

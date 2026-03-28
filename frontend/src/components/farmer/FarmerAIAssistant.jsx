@@ -7,6 +7,9 @@ const quickPrompts = [
   'Which crop should I grow next month in my area?',
   'What does tomorrow weather imply for my pricing?',
   'How do I request logistics for an order?',
+  'How do I create and manage product listings?',
+  'How do I use the Sell Fast Alert feature?',
+  'How do I negotiate prices with buyers?',
 ]
 
 export default function FarmerAIAssistant() {
@@ -17,7 +20,7 @@ export default function FarmerAIAssistant() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Namaste! I can suggest what crop to grow next using weather and nearby demand, and I can guide you on using this app. Ask me anything.',
+      content: 'Namaste! I am your farm & app expert. I can help with crop planning, pricing decisions, market intelligence, logistics, listings, and navigating KhetBazaar. Ask me anything—from "which crop to grow" to "how do I use this feature?" 🌾',
     },
   ])
 
@@ -106,7 +109,7 @@ export default function FarmerAIAssistant() {
                     sendMessage(text)
                   }
                 }}
-                placeholder="Ask about crops, weather, demand, or app usage..."
+                placeholder="Ask about crops, prices, logistics, listings, orders, or app features..."
                 className="w-full rounded-xl border border-border px-3 py-2 text-sm"
               />
               <button
